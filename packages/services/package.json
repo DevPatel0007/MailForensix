@@ -12,6 +12,7 @@
     "@repo/database": "workspace:*",
     "@repo/logger": "workspace:*",
     "google-auth-library": "^10.5.0",
+    "jose": "^6.1.0",
     "zod": "^4.3.5"
   }
 }
