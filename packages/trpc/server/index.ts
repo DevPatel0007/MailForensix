@@ -2,10 +2,12 @@ import { publicProcedure, router } from "./trpc";
 import { z } from "zod";
 import { healthRouter } from "./routes/health/route";
 import { authRouter } from "./routes/auth/route";
+import { gmailRouter } from "./routes/gmail/route";
 
 export const serverRouter = router({
   health: healthRouter,
   auth: authRouter,
+  gmail: gmailRouter,
   test: publicProcedure
   .meta({openapi: { method: "GET", path: "/test" }})
     .input(z.object({ name: z.string().min(2).max(100), email: z.email() })) 

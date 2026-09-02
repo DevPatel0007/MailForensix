@@ -125,6 +125,42 @@ pnpm exec turbo link
 
 ## Useful Links
 
+## Gmail Viewer Setup
+
+The web app supports a separate, read-only Gmail connection after Google identity sign-in. Gmail credentials stay on the server; the browser receives only normalized mailbox data.
+
+### Google Cloud configuration
+
+1. Create or select a Google Cloud project and enable the Gmail API.
+2. Configure the OAuth consent screen and add local testing users while the app is in testing mode.
+3. Add this redirect URI to the OAuth client: `http://localhost:3000/api-auth/google/gmail-callback`.
+4. Request the Gmail read-only scope: `https://www.googleapis.com/auth/gmail.readonly`. Google may require additional review for this sensitive scope outside testing.
+
+### Server environment
+
+Set these values in ignored deployment or local environment files. Do not add them to `apps/web/env.js`:
+
+```env
+GOOGLE_OAUTH_CLIENT_ID=...
+GOOGLE_OAUTH_CLIENT_SECRET=...
+GOOGLE_OAUTH_REDIRECT_URI=http://localhost:3000/api-auth/google/callback
+GOOGLE_GMAIL_OAUTH_REDIRECT_URI=http://localhost:3000/api-auth/google/gmail-callback
+GMAIL_TOKEN_ENCRYPTION_KEY=<at-least-32-random-characters>
+```
+
+The encryption key must remain stable for the lifetime of stored Gmail connections. Rotate existing OAuth, database, JWT, and encryption secrets before deploying if they were committed or shared.
+
+### Local startup and migration
+
+```sh
+pnpm install
+pnpm --filter @repo/database db:migrate
+pnpm --filter api dev
+pnpm --filter web dev
+```
+
+Sign in with Google first, then choose Connect Gmail in the workspace. The initial viewer supports Inbox, Sent, Drafts, and other standard labels, message bodies, and attachment metadata. It does not send mail, modify messages, download attachments, or run background sync.
+
 Learn more about the power of Turborepo:
 
 - [Tasks](https://turborepo.com/docs/crafting-your-repository/running-tasks)
