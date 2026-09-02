@@ -3,6 +3,11 @@ import { and, db, eq } from '@repo/database'
 import { accountsTable } from '@repo/database/models/account'
 import {usersTable} from '@repo/database/models/user' 
 import {type CreateUserWithEmailAndPasswordInputType, createUserWithEmailAndPasswordInput} from './model'
+import {
+  decryptGmailToken,
+  encryptGmailToken,
+  revokeGmailGrant,
+} from "../gmail/tokens";
 
 class UserService {
 
@@ -77,6 +82,80 @@ class UserService {
     });
     return user;
   }
+
+  public async getGoogleAccountForUser(userId: string) {
+  const result = await db
+    .select()
+    .from(accountsTable)
+    .where(and(
+      eq(accountsTable.userId, userId),
+      eq(accountsTable.provider, "google"),
+    ));
+
+  return result[0] ?? null;
+}
+
+public async saveGmailCredentials(userId: string, credentials: {
+  providerAccountId: string;
+  email: string;
+  accessToken?: string;
+  refreshToken?: string;
+  tokenExpiresAt?: Date;
+  grantedScopes: string[];
+}) {
+  const account = await this.getGoogleAccountForUser(userId);
+
+  if (!account || account.providerAccountId !== credentials.providerAccountId) {
+    throw new Error("Gmail account does not match the signed-in user");
+  }
+
+  await db.update(accountsTable)
+    .set({
+      providerEmail: credentials.email,
+      gmailAccessToken: credentials.accessToken ?? account.gmailAccessToken,
+      gmailRefreshToken: credentials.refreshToken
+        ? encryptGmailToken(credentials.refreshToken)
+        : account.gmailRefreshToken,
+      gmailTokenExpiresAt:
+        credentials.tokenExpiresAt ?? account.gmailTokenExpiresAt,
+      gmailGrantedScopes: credentials.grantedScopes.join(" "),
+    })
+    .where(eq(accountsTable.id, account.id));
+}
+
+public async getGmailCredentials(userId: string) {
+  const account = await this.getGoogleAccountForUser(userId);
+
+  if (!account?.gmailRefreshToken) {
+    return null;
+  }
+
+  return {
+    account,
+    refreshToken: decryptGmailToken(account.gmailRefreshToken),
+  };
+}
+
+public async disconnectGmail(userId: string) {
+  const account = await this.getGoogleAccountForUser(userId);
+
+  if (!account) return;
+
+  if (account.gmailRefreshToken) {
+    try {
+      await revokeGmailGrant(decryptGmailToken(account.gmailRefreshToken));
+    } catch {}
+  }
+
+  await db.update(accountsTable)
+    .set({
+      gmailAccessToken: null,
+      gmailRefreshToken: null,
+      gmailTokenExpiresAt: null,
+      gmailGrantedScopes: null,
+    })
+    .where(eq(accountsTable.id, account.id));
+}
 }
 
 export default UserService;
