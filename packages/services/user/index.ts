@@ -1,12 +1,13 @@
 import { randomBytes , createHmac} from 'node:crypto'
-import {db, eq} from '@repo/database'
+import { and, db, eq } from '@repo/database'
+import { accountsTable } from '@repo/database/models/account'
 import {usersTable} from '@repo/database/models/user' 
 import {type CreateUserWithEmailAndPasswordInputType, createUserWithEmailAndPasswordInput} from './model'
 
 class UserService {
 
   private async getUserByEmail(email: string) {
-    const result =await db.select().from(usersTable).where(eq(usersTable.email, email))
+    const result = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase()))
     if (!result || result.length === 0) return null
     return result[0]
   }
@@ -34,6 +35,47 @@ class UserService {
     return {
       id: String(userInsertResult[0].id)
     }
+  }
+
+  public async findById(id: string) {
+    const result = await db.select().from(usersTable).where(eq(usersTable.id, id));
+    return result[0] ?? null;
+  }
+
+  public async upsertGoogleUser(identity: {
+    providerAccountId: string;
+    email: string;
+    fullName: string;
+    profileImageUrl?: string;
+  }) {
+    const existingAccount = await db
+      .select({ user: usersTable })
+      .from(accountsTable)
+      .innerJoin(usersTable, eq(accountsTable.userId, usersTable.id))
+      .where(and(
+        eq(accountsTable.provider, "google"),
+        eq(accountsTable.providerAccountId, identity.providerAccountId),
+      ));
+
+    if (existingAccount[0]?.user) return existingAccount[0].user;
+
+    const existingUser = await this.getUserByEmail(identity.email);
+    const user = existingUser ?? (await db.insert(usersTable).values({
+      fullName: identity.fullName.slice(0, 80),
+      email: identity.email.toLowerCase(),
+      emailVerified: true,
+      profileImageUrl: identity.profileImageUrl,
+    }).returning())[0];
+
+    if (!user) throw new Error("Unable to create Google user");
+
+    await db.insert(accountsTable).values({
+      userId: user.id,
+      provider: "google",
+      providerAccountId: identity.providerAccountId,
+      providerEmail: identity.email.toLowerCase(),
+    });
+    return user;
   }
 }
 
