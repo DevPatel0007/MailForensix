@@ -25,8 +25,18 @@ function setCookie(ctx: { res?: { append: (field: string, value: string) => void
   ctx.res?.append("Set-Cookie", `${name}=${encodeURIComponent(value)}; Max-Age=${maxAge}; ${cookieFlags}`);
 }
 
+function setOAuthCookie(ctx: { res?: { append: (field: string, value: string) => void } }, name: string, value: string, maxAge: number) {
+  // OAuth cookies need SameSite=None for cross-site POST requests
+  const oauthCookieFlags = `Path=/; HttpOnly; SameSite=None; Secure`;
+  ctx.res?.append("Set-Cookie", `${name}=${encodeURIComponent(value)}; Max-Age=${maxAge}; ${oauthCookieFlags}`);
+}
+
 function clearCookie(ctx: { res?: { append: (field: string, value: string) => void } }, name: string) {
   setCookie(ctx, name, "", 0);
+}
+
+function clearOAuthCookie(ctx: { res?: { append: (field: string, value: string) => void } }, name: string) {
+  setOAuthCookie(ctx, name, "", 0);
 }
 
 export const authRouter = router({
@@ -50,7 +60,7 @@ export const authRouter = router({
     .output(z.object({ url: z.url() }))
     .query(({ ctx }) => {
       const transaction = createOAuthTransaction();
-      setCookie(ctx, OAUTH_STATE_COOKIE_NAME, transaction.value, OAUTH_TRANSACTION_MAX_AGE_SECONDS);
+      setOAuthCookie(ctx, OAUTH_STATE_COOKIE_NAME, transaction.value, OAUTH_TRANSACTION_MAX_AGE_SECONDS);
       return { url: getGoogleAuthorizationUrl(transaction.state, createPkceChallenge(transaction.verifier)) };
     }),
 
@@ -63,7 +73,7 @@ export const authRouter = router({
       const entry = cookie?.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${OAUTH_STATE_COOKIE_NAME}=`));
       if (!entry) throw new Error("OAuth transaction missing");
       const transaction = parseOAuthTransaction(decodeURIComponent(entry.slice(OAUTH_STATE_COOKIE_NAME.length + 1)));
-      clearCookie(ctx, OAUTH_STATE_COOKIE_NAME);
+      clearOAuthCookie(ctx, OAUTH_STATE_COOKIE_NAME);
       if (transaction.state !== input.state) throw new Error("OAuth state mismatch");
 
       const identity = await verifyGoogleAuthorizationCode(input.code, transaction.verifier);
