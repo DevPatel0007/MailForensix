@@ -1,0 +1,1 @@
+DROP TABLE "layer1_analyses" CASCADE;
