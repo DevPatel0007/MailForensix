@@ -37,7 +37,7 @@ export function GmailViewer({ email }: { email: string }) {
       <Card className="h-fit">
         <CardHeader><CardTitle className="text-base">{email}</CardTitle></CardHeader>
         <CardContent className="space-y-1">
-          {(labels.data?.labels ?? []).map((label) => { const Icon = icons[label.id] ?? Mail; return <button key={label.id} className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-sm hover:bg-muted ${label.id === labelId ? "bg-muted font-medium" : ""}`} onClick={() => { setLabelId(label.id as LabelId); setPageToken(undefined); setSelectedId(null); }}><span className="flex items-center gap-2"><Icon className="size-4" />{label.name}</span><span className="text-muted-foreground">{label.unread}</span></button>; })}
+          {(labels.data?.labels ?? []).map((label) => { const Icon = icons[label.id] ?? Mail; return <button key={label.id} className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-sm hover:bg-muted ${label.id === labelId ? "bg-muted font-medium" : ""}`} onClick={() => { setLabelId(label.id as LabelId); setPageToken(undefined); setSelectedId(null); }}><span className="flex items-center gap-2"><Icon className="size-4" />{label.name}</span><span className="text-muted-foreground">{label.total}</span></button>; })}
           <Button variant="outline" className="mt-4 w-full" onClick={() => disconnect.mutate()} disabled={disconnect.isPending}><LogOut className="mr-2 size-4" />Disconnect</Button>
         </CardContent>
       </Card>
