@@ -13,6 +13,8 @@ type GmailPart = {
 
 type GmailPayload = { headers?: Array<{ name: string; value: string }>; body?: { data?: string }; parts?: GmailPart[]; mimeType?: string };
 type GmailMessage = { id: string; threadId: string; snippet?: string; labelIds?: string[]; payload?: GmailPayload };
+type GmailLabel = { id: string; name: string; messagesTotal?: number; messagesUnread?: number; threadsTotal?: number };
+type GmailMessageList = { messages?: Array<{ id: string }>; nextPageToken?: string };
 
 export type GmailAccountCredentials = {
   accessToken: string | null;
@@ -33,12 +35,23 @@ function clientFor(credentials: GmailAccountCredentials) {
   return client;
 }
 
-async function request<T>(credentials: GmailAccountCredentials, path: string, params?: Record<string, string | number>) {
-  return clientFor(credentials).request<T>({ url: `${GMAIL_API}${path}`, params });
+async function request<T>(credentials: GmailAccountCredentials, path: string, params?: Record<string, string | number | string[]>) {
+  return clientFor(credentials).request<T>({
+    url: `${GMAIL_API}${path}`,
+    params,
+    paramsSerializer: (values) => {
+      const searchParams = new URLSearchParams();
+      Object.entries(values ?? {}).forEach(([key, value]) => {
+        if (Array.isArray(value)) value.forEach((item) => searchParams.append(key, item));
+        else if (value !== undefined) searchParams.append(key, String(value));
+      });
+      return searchParams.toString();
+    },
+  });
 }
 
 function headers(payload?: GmailPayload) {
-  return Object.fromEntries((payload?.headers ?? []).map(({ name, value }) => [name.toLowerCase(), value]));
+  return Object.fromEntries((payload?.headers ?? []).map(({ name, value }) => [name.trim().toLowerCase(), value.trim()]));
 }
 
 function decodeBody(data?: string) {
@@ -73,20 +86,31 @@ function attachmentParts(payload?: GmailPayload) {
 }
 
 export async function listGmailLabels(credentials: GmailAccountCredentials) {
-  const result = await request<{ labels?: Array<{ id: string; name: string; messagesTotal?: number; messagesUnread?: number }> }>(credentials, "/labels");
-  return (result.data.labels ?? []).filter((label) => ALLOWED_LABELS.has(label.id)).map((label) => ({
+  const result = await request<{ labels?: GmailLabel[] }>(credentials, "/labels");
+  return Promise.all((result.data.labels ?? []).filter((label) => ALLOWED_LABELS.has(label.id)).map(async (label) => ({
     id: label.id,
     name: label.name,
-    total: label.messagesTotal ?? 0,
+    total: label.messagesTotal && label.messagesTotal > 0 ? label.messagesTotal : await countGmailMessages(credentials, label.id),
     unread: label.messagesUnread ?? 0,
-  }));
+  })));
+}
+
+async function countGmailMessages(credentials: GmailAccountCredentials, labelId: string) {
+  let count = 0;
+  let pageToken: string | undefined;
+  do {
+    const result = await request<GmailMessageList>(credentials, "/messages", { labelIds: labelId, maxResults: 500, ...(pageToken ? { pageToken } : {}) });
+    count += result.data.messages?.length ?? 0;
+    pageToken = result.data.nextPageToken;
+  } while (pageToken);
+  return count;
 }
 
 export async function listGmailMessages(credentials: GmailAccountCredentials, labelId: string, maxResults: number, pageToken?: string) {
   if (!ALLOWED_LABELS.has(labelId)) throw new Error("Unsupported Gmail label");
-  const result = await request<{ messages?: Array<{ id: string }>; nextPageToken?: string }>(credentials, "/messages", { labelIds: labelId, maxResults, ...(pageToken ? { pageToken } : {}) });
+  const result = await request<GmailMessageList>(credentials, "/messages", { labelIds: labelId, maxResults, ...(pageToken ? { pageToken } : {}) });
   const messages = await Promise.all((result.data.messages ?? []).map(async ({ id }) => {
-    const message = await request<GmailMessage>(credentials, `/messages/${id}`, { format: "metadata", metadataHeaders: "From,To,Subject,Date" });
+    const message = await request<GmailMessage>(credentials, `/messages/${encodeURIComponent(id)}`, { format: "metadata", metadataHeaders: ["From", "To", "Subject", "Date"] });
     const values = headers(message.data.payload);
     return { id: message.data.id, threadId: message.data.threadId, from: values.from ?? "", to: values.to ?? "", subject: values.subject ?? "(no subject)", date: values.date ?? "", snippet: message.data.snippet ?? "", labels: message.data.labelIds ?? [] };
   }));
