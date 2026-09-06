@@ -6,7 +6,9 @@ import * as trpcExpress from "@trpc/server/adapters/express";
 import { generateOpenApiDocument, createOpenApiExpressMiddleware } from "trpc-to-openapi";
 import { apiReference } from "@scalar/express-api-reference";
 
+import { functions, inngest } from "@repo/inngest";
 import { serverRouter, createContext } from "@repo/trpc/server";
+import { serve } from "inngest/express";
 
 import { env } from "./env";
 
@@ -28,12 +30,27 @@ app.use(
 
 app.use(express.json());
 
+app.use("/api/inngest", serve({ client: inngest, functions }));
+
 app.get("/", (req, res) => {
   return res.json({ message: "Streamyst is up and running..." });
 });
 
 app.get("/health", (req, res) => {
   return res.json({ message: "Streamyst server is healthy", healthy: true });
+});
+
+app.get("/api/hello", async (req, res, next) => {
+  try {
+    await inngest.send({
+      name: "test/hello.world",
+      data: { email: "testUser@example.com" },
+    });
+
+    return res.json({ message: "Event sent!" });
+  } catch (error) {
+    return next(error);
+  }
 });
 
 logger.debug(`openapi.json: ${env.BASE_URL}/openapi.json`);

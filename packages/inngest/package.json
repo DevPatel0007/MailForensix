@@ -1,0 +1,16 @@
+{
+  "name": "@repo/inngest",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm dlx inngest-cli@latest dev -u http://localhost:8000/api/inngest"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "inngest": "^4.20.0"
+  }
+}
