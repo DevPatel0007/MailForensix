@@ -64,21 +64,24 @@ const analyzeLayer1ThenLayer2 = inngest.createFunction(
       );
     });
 
-    const layer2Result = await step.run(
-      "inspect-domain-infrastructure",
-      () => analyzeLayer2(input),
+    const layer2Result = await step.run("inspect-domain-infrastructure", () =>
+      analyzeLayer2({ from: input.from }),
     );
 
     await step.run("persist-layer2-result", async () => {
       await connectMongo();
+      const persistedLayer2 = {
+        ...layer2Result,
+        analyzedAt: new Date(layer2Result.analyzedAt),
+      };
       await EmailAnalysis.findOneAndUpdate(
         { gmailMessageId: input.gmailMessageId },
-        { $set: { layer2: layer2Result } },
+        { $set: { layer2: persistedLayer2 } },
         { upsert: true, new: true },
       );
     });
 
-    return layer1Result;
+    return { layer1: layer1Result, layer2: layer2Result };
   },
 );
 

@@ -21,9 +21,11 @@ export interface Layer2Result {
 }
 
 function domainFromAddress(from: string): string | null {
-  const address = from.match(/<([^>]+)>/)?.[1] ?? from;
-  const domain = address.trim().toLowerCase().split("@").pop();
-  return domain && domain.includes(".") ? domain : null;
+  const address = from.match(/<\s*([^>]+?)\s*>/)?.[1] ?? from.match(/[\w.!#$%&'*+/=?^`{|}~-]+@[\w.-]+/)?.[0];
+  const domain = address?.trim().toLowerCase().split("@").pop();
+  return domain && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/.test(domain)
+    ? domain
+    : null;
 }
 
 async function hasTxtRecord(name: string, prefix: string): Promise<boolean> {
