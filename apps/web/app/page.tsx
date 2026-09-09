@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { GmailViewer } from "~/components/gmail-viewer";
 import { trpc } from "~/trpc/client";
@@ -12,5 +13,5 @@ export default function HomePage() {
 
   const user = me.data;
   if (!user) return null;
-  return <main className="min-h-svh bg-muted/30 p-6 md:p-10"><div className="mx-auto max-w-6xl"><div className="mb-8"><p className="text-sm font-medium text-primary">Streamyst</p><h1 className="mt-2 text-3xl font-semibold tracking-tight">Email workspace</h1><p className="mt-2 text-muted-foreground">Review your Gmail messages securely as {user.email}.</p></div><GmailViewer email={user.email} /></div></main>;
+  return <main className="min-h-svh bg-muted/30 p-6 md:p-10"><div className="mx-auto max-w-6xl"><div className="mb-8 flex items-start justify-between gap-4"><div><p className="text-sm font-medium text-primary">Streamyst</p><h1 className="mt-2 text-3xl font-semibold tracking-tight">Email workspace</h1><p className="mt-2 text-muted-foreground">Review your Gmail messages securely as {user.email}.</p></div><Link className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" href="/test/inngest">Inngest test bench</Link></div><GmailViewer email={user.email} /></div></main>;
 }

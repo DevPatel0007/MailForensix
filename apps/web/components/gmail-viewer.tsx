@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Inbox, Loader2, LogOut, Mail, Paperclip, RefreshCw, Send, ShieldCheck, Star, Trash2 } from "lucide-react";
+import { CheckCircle2, FileText, Inbox, Loader2, LogOut, Mail, Paperclip, RefreshCw, ScanLine, Send, ShieldCheck, Star, Trash2 } from "lucide-react";
 import { trpc } from "~/trpc/client";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
@@ -20,6 +20,7 @@ export function GmailViewer({ email }: { email: string }) {
   const detail = trpc.gmail.message.useQuery({ id: selectedId ?? "" }, { enabled: Boolean(selectedId) });
   const connectUrl = trpc.gmail.connectUrl.useQuery(undefined, { enabled: false });
   const disconnect = trpc.gmail.disconnect.useMutation({ onSuccess: () => { void connection.refetch(); void labels.refetch(); } });
+  const scan = trpc.gmail.scan.useMutation();
 
   const connect = async () => {
     const result = await connectUrl.refetch();
@@ -48,7 +49,7 @@ export function GmailViewer({ email }: { email: string }) {
           {(messages.data?.nextPageToken || pageToken) && <div className="flex justify-between border-t p-4"><Button variant="outline" disabled={!pageToken} onClick={() => { setPageToken(undefined); setSelectedId(null); }}>Previous</Button><Button variant="outline" disabled={!messages.data?.nextPageToken} onClick={() => { setPageToken(messages.data?.nextPageToken ?? undefined); setSelectedId(null); }}>Next</Button></div>}
           </CardContent>
         </Card>
-        {selectedId && <Card><CardHeader><CardTitle>{detail.isLoading ? "Loading message..." : detail.data?.subject}</CardTitle>{detail.data && <p className="text-sm text-muted-foreground">From {detail.data.from} · {detail.data.date}</p>}</CardHeader><CardContent>{detail.isError ? <ErrorState onRetry={() => void detail.refetch()} compact /> : detail.data && <div className="space-y-6"><div className="whitespace-pre-wrap text-sm">{detail.data.bodyText || "No plain-text body available."}</div>{detail.data.bodyHtml && <details><summary className="cursor-pointer text-sm font-medium">View HTML body</summary><iframe className="mt-3 min-h-64 w-full rounded border" title="Email HTML body" sandbox="" srcDoc={detail.data.bodyHtml} /></details>}{detail.data.attachments.length > 0 && <div><h3 className="mb-2 text-sm font-medium">Attachments</h3><ul className="space-y-2">{detail.data.attachments.map((attachment) => <li key={attachment.id} className="flex items-center gap-2 text-sm"><Paperclip className="size-4 text-muted-foreground" />{attachment.filename}<span className="text-muted-foreground">({attachment.mimeType}, {attachment.size} bytes)</span></li>)}</ul></div>}</div>}</CardContent></Card>}
+        {selectedId && <Card><CardHeader><div className="flex items-start justify-between gap-4"><div><CardTitle>{detail.isLoading ? "Loading message..." : detail.data?.subject}</CardTitle>{detail.data && <p className="text-sm text-muted-foreground">From {detail.data.from} · {detail.data.date}</p>}</div>{detail.data && <Button onClick={() => scan.mutate({ id: detail.data.id })} disabled={scan.isPending} aria-label="Run full email analysis"><ScanLine className="mr-2 size-4" />{scan.isPending ? "Submitting..." : "Run full analysis"}</Button>}</div>{scan.isSuccess && <p className="mt-3 flex items-center gap-2 text-sm text-emerald-600"><CheckCircle2 className="size-4" />Layer 1 submitted. Layer 2 will run automatically after it.</p>}{scan.isError && <p className="mt-3 text-sm text-destructive">{scan.error.message}</p>}</CardHeader><CardContent>{detail.isError ? <ErrorState onRetry={() => void detail.refetch()} compact /> : detail.data && <div className="space-y-6"><div className="whitespace-pre-wrap text-sm">{detail.data.bodyText || "No plain-text body available."}</div>{detail.data.bodyHtml && <details><summary className="cursor-pointer text-sm font-medium">View HTML body</summary><iframe className="mt-3 min-h-64 w-full rounded border" title="Email HTML body" sandbox="" srcDoc={detail.data.bodyHtml} /></details>}{detail.data.attachments.length > 0 && <div><h3 className="mb-2 text-sm font-medium">Attachments</h3><ul className="space-y-2">{detail.data.attachments.map((attachment) => <li key={attachment.id} className="flex items-center gap-2 text-sm"><Paperclip className="size-4 text-muted-foreground" />{attachment.filename}<span className="text-muted-foreground">({attachment.mimeType}, {attachment.size} bytes)</span></li>)}</ul></div>}</div>}</CardContent></Card>}
       </div>
     </div>
   );

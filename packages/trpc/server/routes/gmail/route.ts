@@ -8,7 +8,8 @@ import {
   parseOAuthTransaction,
 } from "@repo/services/auth";
 import { exchangeGmailAuthorizationCode, getGmailAuthorizationUrl } from "@repo/services/clients/google-oauth";
-import { listGmailLabels, listGmailMessages, getGmailMessage } from "@repo/services/gmail/client";
+import { listGmailLabels, listGmailMessages, getGmailMessage, getGmailRawMessage } from "@repo/services/gmail/client";
+import { inngest } from "@repo/inngest";
 import { protectedProcedure, router } from "../../trpc";
 import { generatePath } from "../../utils/path-generator";
 import { userService } from "../../services";
@@ -114,4 +115,34 @@ export const gmailRouter = router({
     .query(async ({ ctx, input }) => {
       try { return await getGmailMessage(await credentialsFor(String(ctx.user.id)), input.id); } catch (error) { return gmailError(error); }
     }),
+
+  scan: protectedProcedure
+    .meta({ openapi: { method: "POST", path: getPath("/scan"), tags: ["Gmail"] } })
+    .input(z.object({ id: z.string().min(1).max(256) }))
+    .output(z.object({ submitted: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const credentials = await credentialsFor(String(ctx.user.id));
+      const message = await getGmailMessage(credentials, input.id);
+      const raw = await getGmailRawMessage(credentials, input.id);
+      const account = await userService.getGoogleAccountForUser(String(ctx.user.id));
+
+      await inngest.send({
+        name: "mail.received",
+        data: {
+          gmailMessageId: message.id,
+          userId: String(ctx.user.id),
+          accountId: String(account?.id),
+          message: raw,
+          senderIp: "0.0.0.0",
+          helo: "",
+          from: message.from,
+          to: message.to,
+          subject: message.subject,
+          date: message.date,
+        },
+      });
+
+      return { submitted: true };
+    }),
+
 });
