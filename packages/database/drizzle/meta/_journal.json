@@ -29,6 +29,20 @@
       "when": 1788371109785,
       "tag": "0003_salty_texas_twister",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788720896769,
+      "tag": "0004_calm_mandarin",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788721259045,
+      "tag": "0005_wandering_whistler",
+      "breakpoints": true
     }
   ]
 }
