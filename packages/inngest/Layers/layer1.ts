@@ -6,6 +6,8 @@ import {
   type MessageInput,
 } from "mailauth";
 
+import { detectAnonymizer } from "./anonymizerDetection";
+
 /**
  * Layer 1: Authentication and header forensics.
  *
@@ -53,12 +55,19 @@ export type Layer1SignalCode =
   | "reply_to_mismatch"
   | "display_name_spoofing"
   | "message_id_missing_or_malformed"
-  | "received_chain_anomaly";
+  | "received_chain_anomaly"
+  | "tor_exit_node_detected"
+  | "vpn_or_proxy_ip_detected"
+  | "originating_ip_unavailable";
 
 export interface Layer1Signal {
   code: Layer1SignalCode;
   score: number;
   explanation: string;
+  ip?: string;
+  provider?: string;
+  asn?: string;
+  hopIndex?: number;
 }
 
 export interface Layer1Result {
@@ -87,6 +96,9 @@ const SIGNAL_WEIGHTS: Record<Layer1SignalCode, number> = {
   display_name_spoofing: 20,
   message_id_missing_or_malformed: 5,
   received_chain_anomaly: 10,
+  tor_exit_node_detected: 25,
+  vpn_or_proxy_ip_detected: 15,
+  originating_ip_unavailable: 5,
 };
 
 /** Runs the single external authentication operation for this layer. */
@@ -262,7 +274,10 @@ function capScore(signals: readonly Layer1Signal[]): number {
 /** Public entry point used by the pipeline and easy to replace with a test double. */
 export async function analyzeLayer1(input: Layer1Input): Promise<Layer1Result> {
   const mailauth = await verifyMailAuthentication(input);
-  const signals = evaluateHeaderSignals(mailauth, input.brandDomains);
+  const signals = [
+    ...evaluateHeaderSignals(mailauth, input.brandDomains),
+    ...(await detectAnonymizer(mailauth.receivedChain ?? [], mailauth)),
+  ];
 
   return {
     score: capScore(signals),

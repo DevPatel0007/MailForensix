@@ -18,7 +18,7 @@ import { userService } from '../../services';
 
 
 const TAGS = ["Authentication"];
-const getPath = generatePath("/authentication");
+const getPath = generatePath("/auth");
 const cookieFlags = `Path=/; HttpOnly; SameSite=Lax${servicesEnv.AUTH_COOKIE_SECURE ? "; Secure" : ""}`;
 
 function setCookie(ctx: { res?: { append: (field: string, value: string) => void } }, name: string, value: string, maxAge: number) {
