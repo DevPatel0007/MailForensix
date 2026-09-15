@@ -71,22 +71,6 @@ const analyzeLayer1ThenLayer2 = inngest.createFunction(
       analyzeLayer2({ from: input.from, receivedHeaders: input.receivedHeaders }),
     );
 
-    await step.run("persist-layer2-result", async () => {
-      await connectMongo();
-      await EmailAnalysis.findOneAndUpdate(
-        { gmailMessageId: input.gmailMessageId },
-        {
-          $set: {
-            layer2: {
-              ...layer2Result,
-              analyzedAt: new Date(layer2Result.analyzedAt),
-            },
-          },
-        },
-        { upsert: true, new: true },
-      );
-    });
-
     const layer3Result = await step.run("nlp-llm-content-analysis", () =>
       analyzeLayer3({
         subject: input.subject,
