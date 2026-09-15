@@ -9,12 +9,15 @@
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
-    "typescript": "^5.9.3",
-    "tsx": "^4.21.0"
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@google/genai": "^2.22.0",
     "@repo/mongodb": "workspace:*",
     "inngest": "^4.20.0",
-    "mailauth": "^5.0.3"
+    "mailauth": "^5.0.3",
+    "maxmind": "^5.0.7",
+    "whois-json": "^2.0.4"
   }
 }

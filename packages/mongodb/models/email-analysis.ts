@@ -29,6 +29,19 @@ export interface IEmailAnalysis extends Document {
     signals?: Array<{ code: string; score: number; explanation: string }>;
     analyzedAt?: Date;
   };
+  layer3?: {
+    score?: number;
+    judgement?: {
+      impersonation_target?: string | null;
+      urgency_score?: number;
+      bec_pattern?: string;
+      tone_analysis?: string;
+      confidence?: number;
+    };
+    signals?: Array<{ code: string; score: number; explanation: string }>;
+    analyzedAt?: Date;
+    model?: string;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -68,6 +81,19 @@ const EmailAnalysisSchema = new Schema(
       hasDmarc: Boolean,
       signals: [{ code: String, score: Number, explanation: String }],
       analyzedAt: { type: Date, default: Date.now },
+    },
+    layer3: {
+      score: Number,
+      judgement: {
+        impersonation_target: String,
+        urgency_score: Number,
+        bec_pattern: String,
+        tone_analysis: String,
+        confidence: Number,
+      },
+      signals: [{ code: String, score: Number, explanation: String }],
+      analyzedAt: { type: Date, default: Date.now },
+      model: String,
     },
   },
   { timestamps: true },
