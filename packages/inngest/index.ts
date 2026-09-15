@@ -17,6 +17,8 @@ type MailReceivedEventData = Omit<Layer1Input, "message"> & {
   to: string;
   subject: string;
   date: string;
+  /** Raw `Received:` headers forwarded from the Gmail message for Layer 2 IP extraction. */
+  receivedHeaders?: string[];
 };
 
 const helloWorld = inngest.createFunction(
@@ -66,18 +68,21 @@ const analyzeLayer1ThenLayer2 = inngest.createFunction(
     });
 
     const layer2Result = await step.run("inspect-domain-infrastructure", () =>
-      analyzeLayer2({ from: input.from }),
+      analyzeLayer2({ from: input.from, receivedHeaders: input.receivedHeaders }),
     );
 
     await step.run("persist-layer2-result", async () => {
       await connectMongo();
-      const persistedLayer2 = {
-        ...layer2Result,
-        analyzedAt: new Date(layer2Result.analyzedAt),
-      };
       await EmailAnalysis.findOneAndUpdate(
         { gmailMessageId: input.gmailMessageId },
-        { $set: { layer2: persistedLayer2 } },
+        {
+          $set: {
+            layer2: {
+              ...layer2Result,
+              analyzedAt: new Date(layer2Result.analyzedAt),
+            },
+          },
+        },
         { upsert: true, new: true },
       );
     });
