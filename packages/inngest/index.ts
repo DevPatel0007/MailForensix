@@ -2,6 +2,7 @@ import { Inngest } from "inngest";
 
 import { analyzeLayer1, type Layer1Input } from "./Layers/layer1";
 import { analyzeLayer2 } from "./Layers/layer2";
+import { analyzeLayer3 } from "./Layers/layer3";
 import { connectMongo, EmailAnalysis } from "@repo/mongodb";
 
 export const inngest = new Inngest({ id: "trpc-monorepo" });
@@ -16,6 +17,8 @@ type MailReceivedEventData = Omit<Layer1Input, "message"> & {
   to: string;
   subject: string;
   date: string;
+  /** Raw `Received:` headers forwarded from the Gmail message for Layer 2 IP extraction. */
+  receivedHeaders?: string[];
 };
 
 const helloWorld = inngest.createFunction(
@@ -65,23 +68,36 @@ const analyzeLayer1ThenLayer2 = inngest.createFunction(
     });
 
     const layer2Result = await step.run("inspect-domain-infrastructure", () =>
-      analyzeLayer2({ from: input.from }),
+      analyzeLayer2({ from: input.from, receivedHeaders: input.receivedHeaders }),
     );
 
-    await step.run("persist-layer2-result", async () => {
+    const layer3Result = await step.run("nlp-llm-content-analysis", () =>
+      analyzeLayer3({
+        subject: input.subject,
+        bodyText: input.message as unknown as string,
+        from: input.from,
+        to: input.to,
+        priorSignals: [
+          ...layer1Result.signals.map((s) => s.explanation),
+          ...layer2Result.signals.map((s) => s.explanation),
+        ],
+      }),
+    );
+
+    await step.run("persist-layer3-result", async () => {
       await connectMongo();
-      const persistedLayer2 = {
-        ...layer2Result,
-        analyzedAt: new Date(layer2Result.analyzedAt),
+      const persistedLayer3 = {
+        ...layer3Result,
+        analyzedAt: new Date(layer3Result.analyzedAt),
       };
       await EmailAnalysis.findOneAndUpdate(
         { gmailMessageId: input.gmailMessageId },
-        { $set: { layer2: persistedLayer2 } },
+        { $set: { layer3: persistedLayer3 } },
         { upsert: true, new: true },
       );
     });
 
-    return { layer1: layer1Result, layer2: layer2Result };
+    return { layer1: layer1Result, layer2: layer2Result, layer3: layer3Result };
   },
 );
 

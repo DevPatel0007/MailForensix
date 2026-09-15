@@ -20,14 +20,42 @@ export interface IEmailAnalysis extends Document {
     mailauth?: any;
     analyzedAt?: Date;
   };
-  layer2: {
+  layer2?: {
     score?: number;
+    confidence?: string;
+    missingChecks?: string[];
     domain?: string | null;
     mxRecords?: string[];
     hasSpf?: boolean;
+    spfPolicy?: string | null;
     hasDmarc?: boolean;
+    dmarcPolicy?: string | null;
+    domainAgeDays?: number | null;
+    whoisCreatedAt?: string | null;
+    whoisHidden?: boolean;
+    senderIp?: string | null;
+    reverseDns?: string | null;
+    asn?: string | null;
+    asnOrganization?: string | null;
+    country?: string | null;
+    hostingProvider?: string | null;
+    isCloudInfrastructure?: boolean;
+    blacklistMatches?: Array<{ source: string; type: string; listed: boolean }>;
     signals?: Array<{ code: string; score: number; explanation: string }>;
     analyzedAt?: Date;
+  };
+  layer3?: {
+    score?: number;
+    judgement?: {
+      impersonation_target?: string | null;
+      urgency_score?: number;
+      bec_pattern?: string;
+      tone_analysis?: string;
+      confidence?: number;
+    };
+    signals?: Array<{ code: string; score: number; explanation: string }>;
+    analyzedAt?: Date;
+    model?: string;
   };
   createdAt: Date;
   updatedAt: Date;
@@ -62,12 +90,40 @@ const EmailAnalysisSchema = new Schema(
     },
     layer2: {
       score: Number,
+      confidence: String,
+      missingChecks: [String],
       domain: String,
       mxRecords: [String],
       hasSpf: Boolean,
+      spfPolicy: String,
       hasDmarc: Boolean,
+      dmarcPolicy: String,
+      domainAgeDays: Number,
+      whoisCreatedAt: String,
+      whoisHidden: Boolean,
+      senderIp: String,
+      reverseDns: String,
+      asn: String,
+      asnOrganization: String,
+      country: String,
+      hostingProvider: String,
+      isCloudInfrastructure: Boolean,
+      blacklistMatches: [{ source: String, type: String, listed: Boolean }],
       signals: [{ code: String, score: Number, explanation: String }],
       analyzedAt: { type: Date, default: Date.now },
+    },
+    layer3: {
+      score: Number,
+      judgement: {
+        impersonation_target: String,
+        urgency_score: Number,
+        bec_pattern: String,
+        tone_analysis: String,
+        confidence: Number,
+      },
+      signals: [{ code: String, score: Number, explanation: String }],
+      analyzedAt: { type: Date, default: Date.now },
+      model: String,
     },
   },
   { timestamps: true },
