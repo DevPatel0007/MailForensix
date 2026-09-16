@@ -12,7 +12,7 @@ type GmailPart = {
 };
 
 type GmailPayload = { headers?: Array<{ name: string; value: string }>; body?: { data?: string }; parts?: GmailPart[]; mimeType?: string };
-type GmailMessage = { id: string; threadId: string; snippet?: string; labelIds?: string[]; payload?: GmailPayload };
+type GmailMessage = { id: string; threadId: string; snippet?: string; labelIds?: string[]; raw?: string; payload?: GmailPayload };
 type GmailLabel = { id: string; name: string; messagesTotal?: number; messagesUnread?: number; threadsTotal?: number };
 type GmailMessageList = { messages?: Array<{ id: string }>; nextPageToken?: string };
 
@@ -122,4 +122,10 @@ export async function getGmailMessage(credentials: GmailAccountCredentials, id: 
   const values = headers(message.data.payload);
   const body = bodyParts(message.data.payload);
   return { id: message.data.id, threadId: message.data.threadId, from: values.from ?? "", to: values.to ?? "", subject: values.subject ?? "(no subject)", date: values.date ?? "", snippet: message.data.snippet ?? "", labels: message.data.labelIds ?? [], bodyText: body.text, bodyHtml: body.html, attachments: attachmentParts(message.data.payload) };
+}
+
+export async function getGmailRawMessage(credentials: GmailAccountCredentials, id: string) {
+  const message = await request<GmailMessage>(credentials, `/messages/${encodeURIComponent(id)}`, { format: "raw" });
+  const raw = message.data.raw ?? "";
+  return Buffer.from(raw.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
 }

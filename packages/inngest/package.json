@@ -3,14 +3,21 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "pnpm dlx inngest-cli@latest dev -u http://localhost:8000/api/inngest"
+    "dev": "pnpm dlx inngest-cli@latest dev -u http://localhost:8000/api/inngest",
+    "test": "tsx --test Layers/*.test.ts"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "inngest": "^4.20.0"
+    "@google/genai": "^2.22.0",
+    "@repo/mongodb": "workspace:*",
+    "inngest": "^4.20.0",
+    "mailauth": "^5.0.3",
+    "maxmind": "^5.0.7",
+    "whois-json": "^2.0.4"
   }
 }
