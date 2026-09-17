@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
-import Link from "next/link";
+import React, { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { trpc } from "~/trpc/client";
 import { MailProvider, useMail } from "~/context/MailContext";
@@ -18,6 +17,7 @@ import { InvestigationsView } from "~/components/mailforensix/investigations-vie
 import { IocSearchView } from "~/components/mailforensix/ioc-search-view";
 import { ReportsView } from "~/components/mailforensix/reports-view";
 import { Sheet, SheetContent } from "~/components/ui/sheet";
+import { LandingPage } from "~/components/landing/landing-page";
 
 function WorkspaceLayout() {
   const {
@@ -93,38 +93,35 @@ function WorkspaceLayout() {
 }
 
 export default function HomePage() {
-  const me = trpc.auth.me.useQuery();
+  const me = trpc.auth.me.useQuery(undefined, { retry: false });
+  const [forceWorkspace, setForceWorkspace] = useState(false);
 
-  if (me.isLoading) {
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("workspace") === "true") {
+        setForceWorkspace(true);
+      }
+    }
+  }, []);
+
+  if (me.isLoading && !forceWorkspace) {
     return (
-      <main className="flex min-h-svh items-center justify-center">
-        <Loader2 className="size-6 animate-spin text-primary" />
+      <main className="flex min-h-svh items-center justify-center bg-[#0a0a0a] text-white">
+        <Loader2 className="size-6 animate-spin text-[#00d4a4]" />
       </main>
     );
   }
 
-  if (me.isError || !me.data) {
+  // If user is logged in OR user clicked demo workspace / ?workspace=true
+  if (me.data || forceWorkspace) {
     return (
-      <main className="flex min-h-svh items-center justify-center p-6 text-center bg-muted/20">
-        <div className="max-w-md space-y-4 rounded-xl border bg-card p-8 shadow-sm">
-          <h1 className="text-2xl font-bold tracking-tight">MailForensix Workspace</h1>
-          <p className="text-sm text-muted-foreground">
-            Sign in to securely inspect, triage, and analyze your Gmail messages with automated deep forensics.
-          </p>
-          <a
-            className="inline-flex w-full justify-center rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary/90"
-            href="/login"
-          >
-            Log in to MailForensix
-          </a>
-        </div>
-      </main>
+      <MailProvider>
+        <WorkspaceLayout />
+      </MailProvider>
     );
   }
 
-  return (
-    <MailProvider>
-      <WorkspaceLayout />
-    </MailProvider>
-  );
+  // Default for localhost:3000 root page: Landing Page
+  return <LandingPage onOpenWorkspace={() => setForceWorkspace(true)} />;
 }
