@@ -1,32 +1,28 @@
-import { GalleryVerticalEnd } from "lucide-react"
+import type { Metadata } from 'next'
+import Link from 'next/link'
+import { AuthShell } from '@/components/auth/auth-shell'
+import { AuthForm } from '@/components/auth/auth-form'
 
-import { LoginForm } from "~/components/login-form"
+export const metadata: Metadata = {
+  title: 'Sign in — MailForensix',
+  description: 'Sign in to your MailForensix workspace.',
+}
 
-export default function LoginPage() {
+export default function SignInPage() {
   return (
-    <div className="grid min-h-svh lg:grid-cols-2">
-      <div className="flex flex-col gap-4 p-6 md:p-10">
-        <div className="flex justify-center gap-2 md:justify-start">
-          <a href="#" className="flex items-center gap-2 font-medium">
-            <div className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <GalleryVerticalEnd className="size-4" />
-            </div>
-            Acme Inc.
-          </a>
-        </div>
-        <div className="flex flex-1 items-center justify-center">
-          <div className="w-full max-w-xs">
-            <LoginForm />
-          </div>
-        </div>
-      </div>
-      <div className="relative hidden bg-muted lg:block">
-        <img
-          src="/placeholder.svg"
-          alt="Image"
-          className="absolute inset-0 h-full w-full object-cover dark:brightness-[0.2] dark:grayscale"
-        />
-      </div>
-    </div>
+    <AuthShell
+      title="Sign in to MailForensix"
+      subtitle={
+        <>
+          Don&apos;t have an account?{' '}
+          <Link href="/signup" className="text-foreground underline underline-offset-2">
+            Get started
+          </Link>
+        </>
+      }
+      footerAction="By signing in, you agree to the"
+    >
+      <AuthForm mode="sign-in" />
+    </AuthShell>
   )
 }
