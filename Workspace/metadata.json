@@ -1,0 +1,6 @@
+{
+  "name": "MailForensix",
+  "description": "AI-powered email threat detection and forensic intelligence platform",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

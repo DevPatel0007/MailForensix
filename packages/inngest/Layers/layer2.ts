@@ -55,7 +55,8 @@ export type Layer2SignalCode =
   | "domain_blacklisted"
   | "ip_blacklisted"
   | "urlhaus_match"
-  | "threatfox_match";
+  | "threatfox_match"
+  | "phishtank_match";
 
 export interface Layer2Signal {
   code: Layer2SignalCode;

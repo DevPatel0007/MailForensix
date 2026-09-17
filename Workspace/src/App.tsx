@@ -1,23 +1,25 @@
-"use client";
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
-import React, { useState } from "react";
-import Link from "next/link";
-import { Loader2 } from "lucide-react";
-import { trpc } from "~/trpc/client";
-import { MailProvider, useMail } from "~/context/MailContext";
-import { TopNav } from "~/components/mailforensix/top-nav";
-import { Sidebar } from "~/components/mailforensix/sidebar";
-import { MailboxHeader } from "~/components/mailforensix/mailbox-header";
-import { MailboxToolbar } from "~/components/mailforensix/mailbox-toolbar";
-import { EmailList } from "~/components/mailforensix/email-list";
-import { EmailDetail } from "~/components/mailforensix/email-detail";
-import { CommandDialog } from "~/components/mailforensix/command-dialog";
-import { ComposeDialog } from "~/components/mailforensix/compose-dialog";
-import { UrlWarningDialog } from "~/components/mailforensix/url-warning-dialog";
-import { InvestigationsView } from "~/components/mailforensix/investigations-view";
-import { IocSearchView } from "~/components/mailforensix/ioc-search-view";
-import { ReportsView } from "~/components/mailforensix/reports-view";
-import { Sheet, SheetContent } from "~/components/ui/sheet";
+import React, { useState } from 'react';
+import { ThemeProvider } from './context/ThemeContext';
+import { MailProvider, useMail } from './context/MailContext';
+import { TopNav } from './components/mailforensix/top-nav';
+import { Sidebar } from './components/mailforensix/sidebar';
+import { MailboxHeader } from './components/mailforensix/mailbox-header';
+import { MailboxToolbar } from './components/mailforensix/mailbox-toolbar';
+import { EmailList } from './components/mailforensix/email-list';
+import { EmailDetail } from './components/mailforensix/email-detail';
+import { CommandDialog } from './components/mailforensix/command-dialog';
+import { ComposeDialog } from './components/mailforensix/compose-dialog';
+import { UrlWarningDialog } from './components/mailforensix/url-warning-dialog';
+import { InvestigationsView } from './components/mailforensix/investigations-view';
+import { IocSearchView } from './components/mailforensix/ioc-search-view';
+import { ReportsView } from './components/mailforensix/reports-view';
+import { Sheet, SheetContent } from './components/ui/sheet';
+import { Toaster } from 'sonner';
 
 function WorkspaceLayout() {
   const {
@@ -56,7 +58,7 @@ function WorkspaceLayout() {
 
         {/* Dynamic Center Work Area */}
         <main className="flex flex-col flex-1 h-full min-w-0 overflow-hidden bg-white dark:bg-[#0E1118]">
-          {/* Specialized forensic views */}
+          {/* If a specialized forensics view is selected: */}
           {forensicsView === 'investigations' ? (
             <InvestigationsView />
           ) : forensicsView === 'ioc_search' ? (
@@ -64,7 +66,7 @@ function WorkspaceLayout() {
           ) : forensicsView === 'reports' ? (
             <ReportsView />
           ) : selectedEmail ? (
-            /* Opened Email Forensic Detail Inspector */
+            /* Opened Email Forensic Detail View */
             <EmailDetail
               email={selectedEmail}
               onClose={() => setSelectedEmailId(null)}
@@ -92,39 +94,13 @@ function WorkspaceLayout() {
   );
 }
 
-export default function HomePage() {
-  const me = trpc.auth.me.useQuery();
-
-  if (me.isLoading) {
-    return (
-      <main className="flex min-h-svh items-center justify-center">
-        <Loader2 className="size-6 animate-spin text-primary" />
-      </main>
-    );
-  }
-
-  if (me.isError || !me.data) {
-    return (
-      <main className="flex min-h-svh items-center justify-center p-6 text-center bg-muted/20">
-        <div className="max-w-md space-y-4 rounded-xl border bg-card p-8 shadow-sm">
-          <h1 className="text-2xl font-bold tracking-tight">MailForensix Workspace</h1>
-          <p className="text-sm text-muted-foreground">
-            Sign in to securely inspect, triage, and analyze your Gmail messages with automated deep forensics.
-          </p>
-          <a
-            className="inline-flex w-full justify-center rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary/90"
-            href="/login"
-          >
-            Log in to MailForensix
-          </a>
-        </div>
-      </main>
-    );
-  }
-
+export default function App() {
   return (
-    <MailProvider>
-      <WorkspaceLayout />
-    </MailProvider>
+    <ThemeProvider>
+      <MailProvider>
+        <WorkspaceLayout />
+        <Toaster position="bottom-right" richColors theme="system" />
+      </MailProvider>
+    </ThemeProvider>
   );
 }
