@@ -16,8 +16,6 @@ import {
   Loader2,
 } from "lucide-react"
 import {
-  SidebarGroup,
-  SidebarGroupContent,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -72,10 +70,8 @@ export function NavMailbox() {
   }, [labels.data])
 
   return (
-    <SidebarGroup>
-      <SidebarGroupContent>
-        <SidebarMenu>
-          <Collapsible open={open} onOpenChange={setOpen} asChild>
+    <SidebarMenu>
+      <Collapsible open={open} onOpenChange={setOpen} asChild>
             <SidebarMenuItem>
               <CollapsibleTrigger asChild>
                 <SidebarMenuButton tooltip="Mailbox">
@@ -146,9 +142,7 @@ export function NavMailbox() {
                 </SidebarMenuSub>
               </CollapsibleContent>
             </SidebarMenuItem>
-          </Collapsible>
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
+      </Collapsible>
+    </SidebarMenu>
   )
 }
