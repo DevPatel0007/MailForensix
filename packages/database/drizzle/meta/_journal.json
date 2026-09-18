@@ -43,6 +43,13 @@
       "when": 1788721259045,
       "tag": "0005_wandering_whistler",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789709259224,
+      "tag": "0006_magical_microchip",
+      "breakpoints": true
     }
   ]
 }

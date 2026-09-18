@@ -15,6 +15,7 @@ type GmailPayload = { headers?: Array<{ name: string; value: string }>; body?: {
 type GmailMessage = { id: string; threadId: string; snippet?: string; labelIds?: string[]; raw?: string; payload?: GmailPayload };
 type GmailLabel = { id: string; name: string; messagesTotal?: number; messagesUnread?: number; threadsTotal?: number };
 type GmailMessageList = { messages?: Array<{ id: string }>; nextPageToken?: string };
+type GmailAttachment = { data?: string; size?: number };
 
 export type GmailAccountCredentials = {
   accessToken: string | null;
@@ -128,4 +129,16 @@ export async function getGmailRawMessage(credentials: GmailAccountCredentials, i
   const message = await request<GmailMessage>(credentials, `/messages/${encodeURIComponent(id)}`, { format: "raw" });
   const raw = message.data.raw ?? "";
   return Buffer.from(raw.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+}
+
+export async function getGmailAttachment(
+  credentials: GmailAccountCredentials,
+  messageId: string,
+  attachmentId: string,
+) {
+  const result = await request<GmailAttachment>(
+    credentials,
+    `/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`,
+  );
+  return result.data.data ?? "";
 }

@@ -9,3 +9,29 @@ export const createUserWithEmailAndPasswordInputModel = z.object({
 export const createUserWithEmailAndPasswordOutputModel = z.object({
     id: z.string().describe('The unique identifier of the user'),
 });
+
+export const loginWithEmailAndPasswordInputModel = z.object({
+  email: z.string().email(),
+  password: z.string(),
+});
+
+export const loginWithEmailAndPasswordOutputModel = z.object({
+  id: z.string(),
+});
+
+export const requestPasswordResetInputModel = z.object({
+  email: z.string().email(),
+});
+
+export const requestPasswordResetOutputModel = z.object({
+  success: z.boolean(),
+});
+
+export const resetPasswordInputModel = z.object({
+  token: z.string(),
+  newPassword: z.string().min(6).max(100),
+});
+
+export const resetPasswordOutputModel = z.object({
+  success: z.boolean(),
+});

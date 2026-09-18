@@ -493,6 +493,9 @@ importers:
       '@repo/inngest':
         specifier: workspace:*
         version: link:../inngest
+      '@repo/mongodb':
+        specifier: workspace:^
+        version: link:../mongodb
       '@repo/services':
         specifier: workspace:*
         version: link:../services
