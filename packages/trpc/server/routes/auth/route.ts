@@ -13,7 +13,16 @@ import { getGoogleAuthorizationUrl, verifyGoogleAuthorizationCode } from "@repo/
 import { env as servicesEnv } from "@repo/services/env";
 import { protectedProcedure, publicProcedure, router } from "../../trpc";
 import { generatePath } from "../../utils/path-generator";
-import {createUserWithEmailAndPasswordInputModel , createUserWithEmailAndPasswordOutputModel } from "./model";
+import {
+  createUserWithEmailAndPasswordInputModel, 
+  createUserWithEmailAndPasswordOutputModel,
+  loginWithEmailAndPasswordInputModel,
+  loginWithEmailAndPasswordOutputModel,
+  requestPasswordResetInputModel,
+  requestPasswordResetOutputModel,
+  resetPasswordInputModel,
+  resetPasswordOutputModel
+} from "./model";
 import { userService } from '../../services';
 
 
@@ -44,15 +53,45 @@ export const authRouter = router({
   .meta({openapi: { method: "POST", path: getPath('/createUserWithEmailAndPassword'), tags: TAGS }})
   .input(createUserWithEmailAndPasswordInputModel)
   .output(createUserWithEmailAndPasswordOutputModel)
-  .mutation(async ({ input }) => {
+  .mutation(async ({ input, ctx }) => {
     const { fullName, email, password } = input;
     const { id } = await userService.createUserWithEmailAndPassword({
       fullName,
       email,
       password,
     });
+    setCookie(ctx, AUTH_COOKIE_NAME, await createSessionToken(id), AUTH_COOKIE_MAX_AGE_SECONDS);
     return { id };
   }),
+
+  loginWithEmailAndPassword: publicProcedure
+    .meta({ openapi: { method: "POST", path: getPath('/loginWithEmailAndPassword'), tags: TAGS } })
+    .input(loginWithEmailAndPasswordInputModel)
+    .output(loginWithEmailAndPasswordOutputModel)
+    .mutation(async ({ input, ctx }) => {
+      const { email, password } = input;
+      const { id } = await userService.loginWithEmailAndPassword({ email, password });
+      setCookie(ctx, AUTH_COOKIE_NAME, await createSessionToken(id), AUTH_COOKIE_MAX_AGE_SECONDS);
+      return { id };
+    }),
+
+  requestPasswordReset: publicProcedure
+    .meta({ openapi: { method: "POST", path: getPath('/requestPasswordReset'), tags: TAGS } })
+    .input(requestPasswordResetInputModel)
+    .output(requestPasswordResetOutputModel)
+    .mutation(async ({ input }) => {
+      const { success } = await userService.requestPasswordReset({ email: input.email });
+      return { success };
+    }),
+
+  resetPassword: publicProcedure
+    .meta({ openapi: { method: "POST", path: getPath('/resetPassword'), tags: TAGS } })
+    .input(resetPasswordInputModel)
+    .output(resetPasswordOutputModel)
+    .mutation(async ({ input }) => {
+      const { success } = await userService.resetPassword({ token: input.token, newPassword: input.newPassword });
+      return { success };
+    }),
 
   googleAuthorizationUrl: publicProcedure
     .meta({ openapi: { method: "GET", path: getPath("/google"), tags: TAGS } })
