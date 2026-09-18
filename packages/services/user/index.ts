@@ -2,7 +2,16 @@ import { randomBytes , createHmac} from 'node:crypto'
 import { and, db, eq } from '@repo/database'
 import { accountsTable } from '@repo/database/models/account'
 import {usersTable} from '@repo/database/models/user' 
-import {type CreateUserWithEmailAndPasswordInputType, createUserWithEmailAndPasswordInput} from './model'
+import {
+  type CreateUserWithEmailAndPasswordInputType,
+  createUserWithEmailAndPasswordInput,
+  type LoginWithEmailAndPasswordInputType,
+  loginWithEmailAndPasswordInput,
+  type RequestPasswordResetInputType,
+  requestPasswordResetInput,
+  type ResetPasswordInputType,
+  resetPasswordInput
+} from './model'
 import {
   decryptGmailToken,
   encryptGmailToken,
@@ -40,6 +49,75 @@ class UserService {
     return {
       id: String(userInsertResult[0].id)
     }
+  }
+
+  public async loginWithEmailAndPassword(payload: LoginWithEmailAndPasswordInputType) {
+    const { email, password } = await loginWithEmailAndPasswordInput.parseAsync(payload)
+    const user = await this.getUserByEmail(email)
+    if (!user || !user.salt || !user.password) {
+      throw new Error("Invalid email or password")
+    }
+
+    const hash = createHmac('sha256', user.salt).update(password).digest('hex')
+    if (hash !== user.password) {
+      throw new Error("Invalid email or password")
+    }
+
+    return { id: String(user.id) }
+  }
+
+  public async requestPasswordReset(payload: RequestPasswordResetInputType) {
+    const { email } = await requestPasswordResetInput.parseAsync(payload)
+    const user = await this.getUserByEmail(email)
+    
+    // Don't throw if user doesn't exist to prevent email enumeration, just return
+    if (!user) {
+      return { success: true }
+    }
+
+    const resetToken = randomBytes(32).toString('hex')
+    const expiresAt = new Date()
+    expiresAt.setHours(expiresAt.getHours() + 1) // 1 hour expiration
+
+    await db.update(usersTable)
+      .set({
+        passwordResetToken: resetToken,
+        passwordResetExpiresAt: expiresAt,
+      })
+      .where(eq(usersTable.id, user.id))
+
+    // In a real app, send the token via email here.
+    // For now, we print it to the console for development.
+    const resetLink = `http://localhost:3000/reset-password?token=${resetToken}`
+    console.log(`\n\n[DEV ONLY] Password reset link for ${email}: ${resetLink}\n\n`)
+
+    return { success: true }
+  }
+
+  public async resetPassword(payload: ResetPasswordInputType) {
+    const { token, newPassword } = await resetPasswordInput.parseAsync(payload)
+    
+    // Find user by token
+    const result = await db.select().from(usersTable).where(eq(usersTable.passwordResetToken, token))
+    const user = result[0]
+    
+    if (!user || !user.passwordResetExpiresAt || user.passwordResetExpiresAt < new Date()) {
+      throw new Error("Invalid or expired password reset token")
+    }
+
+    const salt = randomBytes(16).toString('hex')
+    const hash = createHmac('sha256', salt).update(newPassword).digest('hex')
+
+    await db.update(usersTable)
+      .set({
+        password: hash,
+        salt: salt,
+        passwordResetToken: null,
+        passwordResetExpiresAt: null,
+      })
+      .where(eq(usersTable.id, user.id))
+
+    return { success: true }
   }
 
   public async findById(id: string) {

@@ -3,6 +3,7 @@ import { Inngest } from "inngest";
 import { analyzeLayer1, type Layer1Input } from "./Layers/layer1";
 import { analyzeLayer2 } from "./Layers/layer2";
 import { analyzeLayer3 } from "./Layers/layer3";
+import { analyzeLayer4, type Layer4AttachmentInput } from "./Layers/layer4";
 import { connectMongo, EmailAnalysis } from "@repo/mongodb";
 
 export const inngest = new Inngest({ id: "trpc-monorepo" });
@@ -17,6 +18,9 @@ type MailReceivedEventData = Omit<Layer1Input, "message"> & {
   to: string;
   subject: string;
   date: string;
+  bodyText?: string;
+  bodyHtml?: string;
+  attachments?: Layer4AttachmentInput[];
   /** Raw `Received:` headers forwarded from the Gmail message for Layer 2 IP extraction. */
   receivedHeaders?: string[];
 };
@@ -74,7 +78,8 @@ const analyzeLayer1ThenLayer2 = inngest.createFunction(
     const layer3Result = await step.run("nlp-llm-content-analysis", () =>
       analyzeLayer3({
         subject: input.subject,
-        bodyText: input.message as unknown as string,
+        bodyText: input.bodyText ?? input.message,
+        bodyHtml: input.bodyHtml,
         from: input.from,
         to: input.to,
         priorSignals: [
@@ -97,7 +102,24 @@ const analyzeLayer1ThenLayer2 = inngest.createFunction(
       );
     });
 
-    return { layer1: layer1Result, layer2: layer2Result, layer3: layer3Result };
+    const layer4Result = await step.run("inspect-links-and-attachments", () =>
+      analyzeLayer4({
+        bodyHtml: input.bodyHtml,
+        bodyText: input.bodyText,
+        attachments: input.attachments,
+      }),
+    );
+
+    await step.run("persist-layer4-result", async () => {
+      await connectMongo();
+      await EmailAnalysis.findOneAndUpdate(
+        { gmailMessageId: input.gmailMessageId },
+        { $set: { layer4: { ...layer4Result, analyzedAt: new Date() } } },
+        { upsert: true, new: true },
+      );
+    });
+
+    return { layer1: layer1Result, layer2: layer2Result, layer3: layer3Result, layer4: layer4Result };
   },
 );
 

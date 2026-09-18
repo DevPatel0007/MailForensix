@@ -18,6 +18,8 @@ export const usersTable = pgTable("users", {
   profileImageUrl: text("profile_image_url"),
   salt: text("salt"),
   password: text("password"),
+  passwordResetToken: text("password_reset_token"),
+  passwordResetExpiresAt: timestamp("password_reset_expires_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
 });

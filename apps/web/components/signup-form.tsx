@@ -11,6 +11,7 @@ import {
 import { Input } from "~/components/ui/input"
 import { useForm } from "react-hook-form"
 import { trpc } from "~/trpc/client"
+import { useRouter } from "next/navigation"
 
 type SignupFormValues = {
   name: string
@@ -24,6 +25,7 @@ export function SignupForm({
   ...props
 }: React.ComponentProps<"form">) {
 
+  const router = useRouter()
   const { mutateAsync : createUserWithEmailAndPasswordAsync } = trpc.auth.createUserWithEmailAndPassword.useMutation()
   const googleAuth = trpc.auth.googleAuthorizationUrl.useQuery({}, { enabled: false })
   const { register, handleSubmit } = useForm<SignupFormValues>()
@@ -34,13 +36,17 @@ export function SignupForm({
   }
 
   const onSubmit = async (values: SignupFormValues) => {
-    console.log(values)
-    const { id } = await createUserWithEmailAndPasswordAsync({
-      fullName: values.name,
-      email: values.email,
-      password: values.password,
-    })
-    console.log(`User created successfully & id=${id}`)
+    try {
+      await createUserWithEmailAndPasswordAsync({
+        fullName: values.name,
+        email: values.email,
+        password: values.password,
+      })
+      router.push("/")
+    } catch (error) {
+      console.error(error)
+      // Ideally show error message
+    }
   }
 
   return (

@@ -57,6 +57,14 @@ export interface IEmailAnalysis extends Document {
     analyzedAt?: Date;
     model?: string;
   };
+  layer4?: {
+    score?: number;
+    missingChecks?: string[];
+    urls?: Array<{ url: string; hostname: string; flags: string[]; urlhausListed: boolean; vtMaliciousCount: number; vtSuspiciousCount: number; verdict: string }>;
+    attachments?: Array<{ filename: string; mimeType: string; size: number; sha256: string | null; vtMaliciousCount: number; vtSuspiciousCount: number; verdict: string }>;
+    signals?: Array<{ code: string; score: number; explanation: string }>;
+    analyzedAt?: Date;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -124,6 +132,14 @@ const EmailAnalysisSchema = new Schema(
       signals: [{ code: String, score: Number, explanation: String }],
       analyzedAt: { type: Date, default: Date.now },
       model: String,
+    },
+    layer4: {
+      score: Number,
+      missingChecks: [String],
+      urls: [{ url: String, hostname: String, flags: [String], urlhausListed: Boolean, vtMaliciousCount: Number, vtSuspiciousCount: Number, verdict: String }],
+      attachments: [{ filename: String, mimeType: String, size: Number, sha256: String, vtMaliciousCount: Number, vtSuspiciousCount: Number, verdict: String }],
+      signals: [{ code: String, score: Number, explanation: String }],
+      analyzedAt: { type: Date, default: Date.now },
     },
   },
   { timestamps: true },
