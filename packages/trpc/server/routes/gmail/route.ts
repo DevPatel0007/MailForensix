@@ -13,6 +13,7 @@ import { inngest } from "@repo/inngest";
 import { protectedProcedure, router } from "../../trpc";
 import { generatePath } from "../../utils/path-generator";
 import { userService } from "../../services";
+import { connectMongo, EmailAnalysis } from "@repo/mongodb";
 
 const getPath = generatePath("/gmail");
 const cookieFlags = "Path=/; HttpOnly; SameSite=Lax";
@@ -152,6 +153,28 @@ export const gmailRouter = router({
       });
 
       return { submitted: true };
+    }),
+
+  analysis: protectedProcedure
+    .meta({ openapi: { method: "GET", path: getPath("/analysis"), tags: ["Gmail"] } })
+    .input(z.object({ id: z.string().min(1).max(256) }))
+    .output(z.any())
+    .query(async ({ input }) => {
+      await connectMongo();
+      const analysis = await EmailAnalysis.findOne({ gmailMessageId: input.id }).lean();
+      if (!analysis) return null;
+      
+      // Mongoose documents often have _id, we should convert it to string if present, or just return as is
+      // .lean() makes it a POJO, but _id is an ObjectId. tRPC using Zod/JSON might serialize it fine,
+      // but to be safe we can stringify _id, createdAt, updatedAt
+      const result = {
+        ...analysis,
+        _id: analysis._id?.toString(),
+        createdAt: analysis.createdAt?.toISOString(),
+        updatedAt: analysis.updatedAt?.toISOString(),
+      };
+      
+      return result as any; // tRPC will infer the type, or we could explicitly type it.
     }),
 
 });
