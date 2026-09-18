@@ -88,14 +88,17 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
-  --background: #0a0a0a;
-  --foreground: #ffffff;
-  --surface: #111112;
-  --surface-code: #1c1c1e;
-  --hairline: #1f1f1f;
-  --hairline-soft: #171717;
-  --steel: #5a5a5c;
-  --stone: #888888;
+  /* MailForensix light-mode design tokens */
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --surface: #f4f4f5;
+  --surface-code: #e4e4e7;
+  --hairline: #e4e4e7;
+  --hairline-soft: #efefef;
+  --steel: #71717a;
+  --stone: #a1a1aa;
+  --ink: #0a0a0a;
+  --canvas: #ffffff;
   --mint: #00d4a4;
   --mint-deep: #00b48a;
   --mint-soft: #7cebcb;
@@ -134,6 +137,19 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  /* MailForensix dark-mode design tokens */
+  --surface: #111112;
+  --surface-code: #1c1c1e;
+  --hairline: #1f1f1f;
+  --hairline-soft: #171717;
+  --steel: #5a5a5c;
+  --stone: #888888;
+  --ink: #ffffff;
+  --canvas: #0a0a0a;
+  --mint: #00d4a4;
+  --mint-deep: #00b48a;
+  --mint-soft: #7cebcb;
+  --threat: #d45656;
 }
 
 @layer base {
@@ -223,4 +239,20 @@
   .mf-flow-line {
     animation: none;
   }
+}
+/* ── Magic UI animated theme toggler: view-transition support ── */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+[data-magicui-theme-vt="active"]::view-transition-new(root) {
+  animation: none;
+  clip-path: var(--magicui-theme-vt-clip-from);
+  transition: none;
+}
+
+[data-magicui-theme-vt="active"]::view-transition-group(root) {
+  animation-duration: var(--magicui-theme-toggle-vt-duration, 400ms);
 }
