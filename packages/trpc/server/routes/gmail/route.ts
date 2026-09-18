@@ -177,4 +177,74 @@ export const gmailRouter = router({
       return result as any; // tRPC will infer the type, or we could explicitly type it.
     }),
 
+  dashboardStats: protectedProcedure
+    .meta({ openapi: { method: "GET", path: getPath("/dashboardStats"), tags: ["Gmail"] } })
+    .output(z.object({ totalScans: z.number(), threatsDetected: z.number(), safeEmails: z.number(), averageScore: z.number() }))
+    .query(async ({ ctx }) => {
+      await connectMongo();
+      const userId = String(ctx.user.id);
+      const totalScans = await EmailAnalysis.countDocuments({ userId });
+      
+      // Threats are those with score > 50 in layer2 or something similar
+      // Let's make a mock logic if actual data isn't fully structured
+      const threatsDetected = await EmailAnalysis.countDocuments({ userId, "layer2.score": { $gt: 50 } });
+      const safeEmails = totalScans - threatsDetected;
+      
+      const avgQuery = await EmailAnalysis.aggregate([
+        { $match: { userId } },
+        { $group: { _id: null, avg: { $avg: "$layer2.score" } } }
+      ]);
+      const averageScore = avgQuery[0]?.avg || 0;
+
+      return { totalScans, threatsDetected, safeEmails, averageScore };
+    }),
+
+  pastScans: protectedProcedure
+    .meta({ openapi: { method: "GET", path: getPath("/pastScans"), tags: ["Gmail"] } })
+    .output(z.object({ scans: z.array(z.any()) }))
+    .query(async ({ ctx }) => {
+      await connectMongo();
+      const userId = String(ctx.user.id);
+      const scans = await EmailAnalysis.find({ userId }).sort({ createdAt: -1 }).limit(50).lean();
+      return {
+        scans: scans.map(scan => ({
+          ...scan,
+          _id: scan._id?.toString(),
+          createdAt: scan.createdAt?.toISOString(),
+          updatedAt: scan.updatedAt?.toISOString(),
+        }))
+      };
+    }),
+
+  geolocationData: protectedProcedure
+    .meta({ openapi: { method: "GET", path: getPath("/geolocationData"), tags: ["Gmail"] } })
+    .output(z.object({ locations: z.array(z.object({ ip: z.string(), country: z.string(), lat: z.number(), lng: z.number(), score: z.number() })) }))
+    .query(async ({ ctx }) => {
+      await connectMongo();
+      const userId = String(ctx.user.id);
+      const scans = await EmailAnalysis.find({ userId, "layer2.senderIp": { $exists: true, $ne: null } }).lean();
+      
+      // Map them to mock lat/lng since we don't have a real IP-to-Geo DB yet
+      // A simple hash function to generate consistent mock coordinates for an IP
+      const getMockCoords = (ip: string) => {
+        let hash = 0;
+        for (let i = 0; i < ip.length; i++) hash = ip.charCodeAt(i) + ((hash << 5) - hash);
+        return { lat: (hash % 180) - 90, lng: (hash % 360) - 180 };
+      };
+
+      const locations = scans.map(scan => {
+        const ip = scan.layer2?.senderIp || "0.0.0.0";
+        const coords = getMockCoords(ip);
+        return {
+          ip,
+          country: scan.layer2?.country || "Unknown",
+          lat: coords.lat,
+          lng: coords.lng,
+          score: scan.layer2?.score || 0
+        };
+      });
+
+      return { locations };
+    }),
+
 });
