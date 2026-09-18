@@ -23,7 +23,7 @@ export default function GoogleCallbackPage() {
     callback.mutate(
       { code, state },
       {
-        onSuccess: () => window.location.assign("/workspace"),
+        onSuccess: () => window.location.assign("/dashboard"),
         onError: () => setError("Google sign-in failed. Please try again."),
       },
     )
