@@ -440,7 +440,7 @@ const BLACKLIST_SIGNAL_CODES: Set<Layer2SignalCode> = new Set([
   "domain_blacklisted",
   "ip_blacklisted",
   "urlhaus_match",
-  "phishtank_match",
+  "threatfox_match",
 ]);
 
 function weightedScore(signals: Layer2Signal[]): number {
