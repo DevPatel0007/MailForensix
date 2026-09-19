@@ -91,6 +91,7 @@ export interface Layer3Input {
 // ---------------------------------------------------------------------------
 
 const MODEL_ID = "gemini-2.5-flash";
+const MAX_GENERATION_ATTEMPTS = 3;
 
 /**
  * JSON Schema passed to the Gemini API as `responseSchema`.  The SDK enforces
@@ -220,6 +221,27 @@ function deriveSignalsAndScore(judgement: Layer3LlmJudgement): {
   return { signals, score };
 }
 
+function isRetryableModelError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /\b(429|500|502|503|504)\b|UNAVAILABLE|RESOURCE_EXHAUSTED|high demand/i.test(message);
+}
+
+function unavailableResult(): Layer3Result {
+  return {
+    score: 0,
+    judgement: {
+      impersonation_target: null,
+      urgency_score: 0,
+      bec_pattern: "none",
+      tone_analysis: "Layer 3 analysis was unavailable after temporary model capacity errors.",
+      confidence: 0,
+    },
+    signals: [],
+    analyzedAt: new Date(),
+    model: `${MODEL_ID}:unavailable`,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
@@ -239,15 +261,26 @@ export async function analyzeLayer3(input: Layer3Input): Promise<Layer3Result> {
 
   const ai = new GoogleGenAI({ apiKey });
 
-  const response = await ai.models.generateContent({
-    model: MODEL_ID,
-    contents: buildPrompt(input),
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: RESPONSE_SCHEMA,
-      temperature: 0.1, // Low temperature for consistent, deterministic judgements
-    },
-  });
+  let response;
+  for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt += 1) {
+    try {
+      response = await ai.models.generateContent({
+        model: MODEL_ID,
+        contents: buildPrompt(input),
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: RESPONSE_SCHEMA,
+          temperature: 0.1,
+        },
+      });
+      break;
+    } catch (error) {
+      if (!isRetryableModelError(error) || attempt === MAX_GENERATION_ATTEMPTS) return unavailableResult();
+      await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** (attempt - 1)));
+    }
+  }
+
+  if (!response) return unavailableResult();
 
   const rawText = response.text ?? "";
   const judgement = JSON.parse(rawText) as Layer3LlmJudgement;

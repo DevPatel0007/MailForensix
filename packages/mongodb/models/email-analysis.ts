@@ -48,7 +48,7 @@ export interface IEmailAnalysis extends Document {
       extractionSources: string[];
       limitations: string[];
     };
-    geolocation?: { status: string; country: string | null; countryCode: string | null; region: string | null; city: string | null; latitude: number | null; longitude: number | null; source: string | null };
+    geolocation?: { status: string; country: string | null; countryCode: string | null; region: string | null; city: string | null; latitude: number | null; longitude: number | null; accuracyRadiusKm: number | null; providerConfidence: string | null; source: string | null };
     network?: { status: string; asn: string | null; asnOrganization: string | null; isp: string | null; hostingProvider: string | null; reverseDns: string | null };
     anonymization?: {
       status: string;
@@ -146,7 +146,7 @@ const EmailAnalysisSchema = new Schema(
         extractionSources: [String],
         limitations: [String],
       },
-      geolocation: { status: String, country: String, countryCode: String, region: String, city: String, latitude: Number, longitude: Number, source: String },
+      geolocation: { status: String, country: String, countryCode: String, region: String, city: String, latitude: Number, longitude: Number, accuracyRadiusKm: Number, providerConfidence: String, source: String },
       network: { status: String, asn: String, asnOrganization: String, isp: String, hostingProvider: String, reverseDns: String },
       anonymization: {
         status: String,
