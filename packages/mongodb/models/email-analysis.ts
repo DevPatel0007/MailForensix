@@ -65,6 +65,11 @@ export interface IEmailAnalysis extends Document {
     signals?: Array<{ code: string; score: number; explanation: string }>;
     analyzedAt?: Date;
   };
+  layer5?: {
+    cluster?: Array<{ id: string; subject: string; date: string }>;
+    recordsCreated?: number;
+    analyzedAt?: Date;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -139,6 +144,11 @@ const EmailAnalysisSchema = new Schema(
       urls: [{ url: String, hostname: String, flags: [String], urlhausListed: Boolean, vtMaliciousCount: Number, vtSuspiciousCount: Number, verdict: String }],
       attachments: [{ filename: String, mimeType: String, size: Number, sha256: String, vtMaliciousCount: Number, vtSuspiciousCount: Number, verdict: String }],
       signals: [{ code: String, score: Number, explanation: String }],
+      analyzedAt: { type: Date, default: Date.now },
+    },
+    layer5: {
+      cluster: [{ id: String, subject: String, date: String }],
+      recordsCreated: Number,
       analyzedAt: { type: Date, default: Date.now },
     },
   },

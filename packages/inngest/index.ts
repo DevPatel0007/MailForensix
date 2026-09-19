@@ -4,7 +4,7 @@ import { analyzeLayer1, type Layer1Input } from "./Layers/layer1";
 import { analyzeLayer2 } from "./Layers/layer2";
 import { analyzeLayer3 } from "./Layers/layer3";
 import { analyzeLayer4, type Layer4AttachmentInput } from "./Layers/layer4";
-import { analyzeLayer5 } from "./Layers/layer5";
+import { analyzeLayer5, getCampaignCluster } from "./Layers/layer5";
 import { connectMongo, EmailAnalysis } from "@repo/mongodb";
 
 export const inngest = new Inngest({ id: "trpc-monorepo" });
@@ -120,8 +120,8 @@ const analyzeLayer1ThenLayer2 = inngest.createFunction(
       );
     });
 
-    await step.run("persist-layer5-graph", async () => {
-      await analyzeLayer5({
+    const layer5Result = await step.run("persist-layer5-graph", async () => {
+      const result = await analyzeLayer5({
         gmailMessageId: input.gmailMessageId,
         from: input.from,
         to: input.to,
@@ -130,9 +130,20 @@ const analyzeLayer1ThenLayer2 = inngest.createFunction(
         senderIp: layer2Result.senderIp ?? undefined,
         domain: layer2Result.domain ?? undefined,
       });
+
+      const cluster = await getCampaignCluster(input.gmailMessageId);
+
+      await connectMongo();
+      await EmailAnalysis.findOneAndUpdate(
+        { gmailMessageId: input.gmailMessageId },
+        { $set: { layer5: { cluster, recordsCreated: result.recordsCreated, analyzedAt: new Date() } } },
+        { upsert: true, new: true },
+      );
+
+      return { ...result, cluster };
     });
 
-    return { layer1: layer1Result, layer2: layer2Result, layer3: layer3Result, layer4: layer4Result };
+    return { layer1: layer1Result, layer2: layer2Result, layer3: layer3Result, layer4: layer4Result, layer5: layer5Result };
   },
 );
 

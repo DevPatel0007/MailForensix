@@ -72,3 +72,41 @@ export async function analyzeLayer5(input: Layer5Input) {
     await session.close();
   }
 }
+
+export async function getCampaignCluster(gmailMessageId: string) {
+  const driver = await connectNeo4j();
+  const session = driver.session();
+
+  try {
+    const query = `
+      MATCH (e1:Email { id: $gmailMessageId })
+      
+      OPTIONAL MATCH (e1)-[:HAS_DOMAIN]->(d:Domain)
+      OPTIONAL MATCH (e1)-[:HAS_IP]->(ip:IP)
+      OPTIONAL MATCH (sender:Person)-[:SENT]->(e1)
+      
+      OPTIONAL MATCH (e2_domain:Email)-[:HAS_DOMAIN]->(d) WHERE e2_domain.id <> e1.id
+      OPTIONAL MATCH (e2_ip:Email)-[:HAS_IP]->(ip) WHERE e2_ip.id <> e1.id
+      OPTIONAL MATCH (sender)-[:SENT]->(e2_sender:Email) WHERE e2_sender.id <> e1.id
+      
+      WITH e1, collect(DISTINCT e2_domain) + collect(DISTINCT e2_ip) + collect(DISTINCT e2_sender) AS raw_related
+      UNWIND raw_related AS related_email
+      WITH e1, DISTINCT related_email
+      WHERE related_email IS NOT NULL
+      
+      RETURN {
+        id: related_email.id,
+        subject: related_email.subject,
+        date: related_email.date
+      } AS relatedEmail
+    `;
+
+    const result = await session.run(query, { gmailMessageId });
+    return result.records.map(record => record.get("relatedEmail"));
+  } catch (error) {
+    console.error("Error retrieving campaign cluster from Neo4j:", error);
+    return [];
+  } finally {
+    await session.close();
+  }
+}
