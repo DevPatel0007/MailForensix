@@ -372,30 +372,40 @@ export const gmailRouter = router({
 
   geolocationData: protectedProcedure
     .meta({ openapi: { method: "GET", path: getPath("/geolocationData"), tags: ["Gmail"] } })
-    .output(z.object({ locations: z.array(z.object({ ip: z.string(), country: z.string(), lat: z.number(), lng: z.number(), score: z.number() })) }))
+    .output(z.object({ locations: z.array(z.object({
+      ip: z.string(),
+      country: z.string().nullable(),
+      countryCode: z.string().nullable(),
+      region: z.string().nullable(),
+      city: z.string().nullable(),
+      lat: z.number(),
+      lng: z.number(),
+      score: z.number(),
+      source: z.string(),
+      status: z.string(),
+    })) }))
     .query(async ({ ctx }) => {
       await connectMongo();
       const userId = String(ctx.user.id);
       const scans = await EmailAnalysis.find({ userId, "layer2.senderIp": { $exists: true, $ne: null } }).lean();
-      
-      // Map them to mock lat/lng since we don't have a real IP-to-Geo DB yet
-      // A simple hash function to generate consistent mock coordinates for an IP
-      const getMockCoords = (ip: string) => {
-        let hash = 0;
-        for (let i = 0; i < ip.length; i++) hash = ip.charCodeAt(i) + ((hash << 5) - hash);
-        return { lat: (hash % 180) - 90, lng: (hash % 360) - 180 };
-      };
 
-      const locations = scans.map(scan => {
-        const ip = scan.layer2?.senderIp || "0.0.0.0";
-        const coords = getMockCoords(ip);
-        return {
-          ip,
-          country: scan.layer2?.country || "Unknown",
-          lat: coords.lat,
-          lng: coords.lng,
-          score: scan.layer2?.score || 0
-        };
+      const locations = scans.flatMap((scan) => {
+        const layer2 = scan.layer2;
+        const geo = layer2?.geolocation;
+        if (!layer2?.senderIp || !geo || typeof geo.latitude !== "number" || typeof geo.longitude !== "number") return [];
+        if (!Number.isFinite(geo.latitude) || !Number.isFinite(geo.longitude)) return [];
+        return [{
+          ip: layer2.senderIp,
+          country: geo.country ?? layer2.country ?? null,
+          countryCode: geo.countryCode ?? null,
+          region: geo.region ?? null,
+          city: geo.city ?? null,
+          lat: geo.latitude,
+          lng: geo.longitude,
+          score: layer2.score ?? 0,
+          source: geo.source ?? "unknown",
+          status: geo.status,
+        }];
       });
 
       return { locations };

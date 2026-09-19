@@ -1,17 +1,22 @@
 import { resolveMx, resolveTxt, reverse as dnsReverse } from "node:dns/promises";
+import { isIP } from "node:net";
+import { createRequire } from "node:module";
+import { existsSync } from "node:fs";
+import maxmind from "maxmind";
+
+const require = createRequire(__filename);
+const whoisJson = require("whois-json") as (domain: string) => Promise<Record<string, unknown>>;
 
 /**
  * Layer 2: Sender Domain & Infrastructure Reputation.
  *
  * Lifecycle:
  * 1. DNS hygiene — MX, SPF, DMARC (always runs; no external API keys needed).
- * 2. RDAP/WHOIS — domain registration age and WHOIS-privacy detection via the
- *    public RDAP REST API (rdap.org). No API key required.
+ * 2. WHOIS — domain registration age via whois-json.
  * 3. IP / ASN / Geolocation — sender IP extracted from Received headers, then
- *    enriched via ipinfo.io. Requires `IPINFO_TOKEN`; gracefully skipped when
- *    the token is absent.
- * 4. Blacklist reputation — Spamhaus DBL (domain) and ZEN (IP) via DNS,
- *    URLhaus via HTTP, PhishTank via HTTP (requires `PHISHTANK_API_KEY`).
+ *    enriched through local MaxMind GeoLite2 MMDB files.
+ * 4. Blacklist reputation — Spamhaus DBL/ZEN via DNS, URLhaus and PhishTank
+ *    via HTTP.
  *    Every lookup is independently error-tolerant.
  * 5. Weighted scoring — four capped categories sum to a final 0–100 score.
  *    `confidence` and `missingChecks` reflect how much data was available.
@@ -33,6 +38,21 @@ export interface Layer2Input {
   from: string;
   /** Raw `Received:` header values from the parsed email, oldest-last order. */
   receivedHeaders?: string[];
+  anonymization?: {
+    tor: boolean;
+    vpnOrProxy: boolean;
+  };
+}
+
+export type DetectionStatus = "detected" | "not_detected" | "unknown" | "not_applicable" | "stale";
+
+export interface IpExtractionResult {
+  status: "public_ip_found" | "no_public_ip_found";
+  ipsFound: string[];
+  candidateIps: string[];
+  privateIps: string[];
+  extractionSources: string[];
+  limitations: string[];
 }
 
 export type Layer2SignalCode =
@@ -64,7 +84,7 @@ export interface Layer2Signal {
 }
 
 export interface BlacklistMatch {
-  source: "spamhaus_dbl" | "spamhaus_zen" | "urlhaus" | "threatfox";
+  source: "spamhaus_dbl" | "spamhaus_zen" | "urlhaus" | "phishtank" | "threatfox";
   type: string;
   listed: boolean;
 }
@@ -95,6 +115,32 @@ export interface Layer2Result {
   country: string | null;
   hostingProvider: string | null;
   isCloudInfrastructure: boolean;
+  ipExtraction: IpExtractionResult;
+  geolocation: {
+    status: DetectionStatus;
+    country: string | null;
+    countryCode: string | null;
+    region: string | null;
+    city: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    source: string | null;
+  };
+  network: {
+    status: DetectionStatus;
+    asn: string | null;
+    asnOrganization: string | null;
+    isp: string | null;
+    hostingProvider: string | null;
+    reverseDns: string | null;
+  };
+  anonymization: {
+    status: DetectionStatus;
+    tor: { status: DetectionStatus; isExitNode: boolean | null; source: string | null };
+    vpn: { status: DetectionStatus; isVpn: boolean | null; provider: string | null; source: string | null };
+    proxy: { status: DetectionStatus; isProxy: boolean | null; source: string | null };
+  };
+  limitations: string[];
 
   // Blacklists
   blacklistMatches: BlacklistMatch[];
@@ -235,85 +281,95 @@ function dmarcPolicyValue(record: string | null): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 2 — RDAP / WHOIS domain age
+// Phase 2 — WHOIS domain age
 // ---------------------------------------------------------------------------
 
-interface RdapEvent {
-  eventAction: string;
-  eventDate: string;
-}
-
-interface RdapResponse {
-  events?: RdapEvent[];
-  entities?: Array<{ roles?: string[]; vcardArray?: unknown }>;
-  remarks?: Array<{ description?: string[] }>;
-}
-
-async function lookupRdap(
+async function lookupWhois(
   domain: string,
 ): Promise<{ createdAt: string | null; hidden: boolean } | null> {
-  const data = await fetchJson<RdapResponse>(
-    `https://rdap.org/domain/${encodeURIComponent(domain)}`,
-  );
-  if (!data) return null;
-
-  const registration = data.events?.find(
-    (e) => e.eventAction === "registration",
-  );
-  const createdAt = registration?.eventDate ?? null;
-
-  // Detect WHOIS-privacy / redacted registrants
-  const hidden =
-    data.remarks?.some((r) =>
-      r.description?.some((d) =>
-        /redact|privacy|protected|hidden/i.test(d),
-      ),
-    ) ?? false;
-
-  return { createdAt, hidden };
+  try {
+    const data = await withTimeout(whoisJson(domain), EXTERNAL_TIMEOUT_MS);
+    if (!data) return null;
+    const createdAt = String(data.creationDate ?? data.createdDate ?? "") || null;
+    const details = JSON.stringify(data);
+    return {
+      createdAt,
+      hidden: /redact|privacy|protected|hidden|proxy/i.test(details),
+    };
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Phase 3 — IP / ASN / Geo
 // ---------------------------------------------------------------------------
 
-const RFC1918 =
-  /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|127\.|::1|fc|fd)/;
+const IP_PATTERN = /\b(?:\d{1,3}\.){3}\d{1,3}\b|(?<![\w:])[0-9a-f:]{2,39}(?![\w:])/gi;
 
-function extractSenderIp(receivedHeaders: string[]): string | null {
-  // Walk from the first (outermost) Received header inward
-  for (const header of receivedHeaders) {
-    const ipMatch = header.match(
-      /\[(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\]/,
-    );
-    if (ipMatch && ipMatch[1] && !RFC1918.test(ipMatch[1])) {
-      return ipMatch[1];
-    }
-    // Also try bare IPs without brackets
-    const bareIp = header.match(
-      /(?:^|\s)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?:\s|$)/,
-    );
-    if (bareIp && bareIp[1] && !RFC1918.test(bareIp[1])) {
-      return bareIp[1];
-    }
+function isPublicIp(ip: string): boolean {
+  if (isIP(ip) === 4) {
+    return !/^(0\.|10\.|100\.(?:6[4-9]|[7-9]\d)|127\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.0\.0\.|192\.168\.|198\.18\.|198\.51\.100\.|203\.0\.113\.|22[4-9]\.|23\d\.|24\d\.|25[0-5]\.)/.test(ip);
   }
-  return null;
+  return !/^(::1|fc|fd|fe80:|ff|2001:db8:)/i.test(ip);
 }
 
-interface IpInfoResponse {
-  ip: string;
-  org?: string;    // e.g. "AS14061 DigitalOcean, LLC"
-  country?: string;
-  hostname?: string;
+function isGeolocationCandidate(ip: string): boolean {
+  return isPublicIp(ip) && !/^2002:/i.test(ip);
 }
 
-async function lookupIpInfo(
-  ip: string,
-  token: string,
-): Promise<IpInfoResponse | null> {
-  return fetchJson<IpInfoResponse>(
-    `https://ipinfo.io/${ip}/json?token=${token}`,
-  );
+export function extractIpIntelligence(receivedHeaders: string[]): IpExtractionResult {
+  const ipsFound = new Set<string>();
+  const privateIps = new Set<string>();
+  const extractionSources = new Set<string>();
+
+  receivedHeaders.forEach((header, index) => {
+    for (const value of header.match(IP_PATTERN) ?? []) {
+      const ip = value.replace(/^\[|\]$/g, "").toLowerCase();
+      if (!isIP(ip)) continue;
+      ipsFound.add(ip);
+      extractionSources.add(`Received[${index}]`);
+      if (!isGeolocationCandidate(ip)) privateIps.add(ip);
+    }
+  });
+
+  const candidateIps = [...ipsFound]
+    .filter(isGeolocationCandidate)
+    .sort((first, second) => Number(isIP(second) === 4) - Number(isIP(first) === 4));
+  return {
+    status: candidateIps.length ? "public_ip_found" : "no_public_ip_found",
+    ipsFound: [...ipsFound],
+    candidateIps,
+    privateIps: [...privateIps],
+    extractionSources: [...extractionSources],
+    limitations: candidateIps.length
+      ? ["The identified IP may belong to an intermediary rather than the sender."]
+      : ["No usable public IP was found in the available headers."],
+  };
+}
+
+type GeoLiteCity = { country?: { iso_code?: string; names?: { en?: string } }; subdivisions?: Array<{ names?: { en?: string } }>; city?: { names?: { en?: string } }; location?: { latitude?: number; longitude?: number } };
+type GeoLiteAsn = { autonomous_system_number?: number; autonomous_system_organization?: string };
+type IpInfoFallback = { country?: string; countryCode?: string; region?: string; city?: string; loc?: string; org?: string };
+
+type MaxmindReader = { get: (ip: string) => unknown };
+let maxmindReaders: { city?: MaxmindReader; asn?: MaxmindReader } | null;
+
+async function getMaxmindReaders() {
+  if (maxmindReaders) return maxmindReaders;
+  const cityPath = process.env.MAXMIND_CITY_MMDB_PATH;
+  const asnPath = process.env.MAXMIND_ASN_MMDB_PATH;
+  if (!cityPath && !asnPath) return null;
+  maxmindReaders = {};
+  if (cityPath && existsSync(cityPath)) maxmindReaders.city = await maxmind.open(cityPath);
+  if (asnPath && existsSync(asnPath)) maxmindReaders.asn = await maxmind.open(asnPath);
+  return maxmindReaders.city || maxmindReaders.asn ? maxmindReaders : null;
+}
+
+async function lookupIpInfoFallback(ip: string): Promise<IpInfoFallback | null> {
+  const token = process.env.IPINFO_TOKEN;
+  if (!token) return null;
+  return fetchJson<IpInfoFallback>(`https://ipinfo.io/${encodeURIComponent(ip)}/json?token=${encodeURIComponent(token)}`);
 }
 
 async function lookupPtrRecord(ip: string): Promise<string | null> {
@@ -389,6 +445,20 @@ async function checkUrlhaus(domain: string): Promise<boolean> {
     },
   );
   return data?.query_status === "is_host" && (data.urls?.length ?? 0) > 0;
+}
+
+async function checkPhishTank(domain: string): Promise<boolean | null> {
+  const apiKey = process.env.PHISHTANK_API_KEY;
+  if (!apiKey) return null;
+  const data = await fetchJson<{ results?: Array<{ in_database?: boolean; phish_detail_page?: string }> }>(
+    "https://checkurl.phishtank.com/checkurl/",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+      body: `url=${encodeURIComponent(`https://${domain}`)}&format=json&app_key=${encodeURIComponent(apiKey)}`,
+    },
+  );
+  return data?.results?.some((result) => result.in_database === true) ?? false;
 }
 
 
@@ -468,7 +538,7 @@ function weightedScore(signals: Layer2Signal[]): number {
 /**
  * Analyzes the sender domain and infrastructure across five phases.
  *
- * External calls (RDAP, ipinfo.io, blacklists) are independently fault-tolerant:
+ * External calls and local database lookups are independently fault-tolerant:
  * failures degrade `confidence` and populate `missingChecks` but never throw.
  */
 export async function analyzeLayer2(input: Layer2Input): Promise<Layer2Result> {
@@ -482,7 +552,7 @@ export async function analyzeLayer2(input: Layer2Input): Promise<Layer2Result> {
     return {
       score: 30,
       confidence: "minimal",
-      missingChecks: ["rdap", "ip_info", "blacklists"],
+      missingChecks: ["whois", "maxmind", "blacklists"],
       domain: null,
       mxRecords: [],
       hasSpf: false,
@@ -499,6 +569,23 @@ export async function analyzeLayer2(input: Layer2Input): Promise<Layer2Result> {
       country: null,
       hostingProvider: null,
       isCloudInfrastructure: false,
+      ipExtraction: {
+        status: "no_public_ip_found",
+        ipsFound: [],
+        candidateIps: [],
+        privateIps: [],
+        extractionSources: [],
+        limitations: ["No sender domain or usable public IP was available."],
+      },
+      geolocation: { status: "not_applicable", country: null, countryCode: null, region: null, city: null, latitude: null, longitude: null, source: null },
+      network: { status: "not_applicable", asn: null, asnOrganization: null, isp: null, hostingProvider: null, reverseDns: null },
+      anonymization: {
+        status: "not_applicable",
+        tor: { status: "not_applicable", isExitNode: null, source: null },
+        vpn: { status: "not_applicable", isVpn: null, provider: null, source: null },
+        proxy: { status: "not_applicable", isProxy: null, source: null },
+      },
+      limitations: ["No sender domain or usable public IP was available."],
       blacklistMatches: [],
       signals: [
         {
@@ -563,17 +650,17 @@ export async function analyzeLayer2(input: Layer2Input): Promise<Layer2Result> {
     });
   }
 
-  // ── Phase 2 — RDAP / domain age ──────────────────────────────────────────
+  // ── Phase 2 — WHOIS / domain age ─────────────────────────────────────────
   let domainAgeDays: number | null = null;
   let whoisCreatedAt: string | null = null;
   let whoisHidden = false;
 
-  const rdap = await withTimeout(lookupRdap(domain), EXTERNAL_TIMEOUT_MS + 500);
-  if (rdap) {
-    whoisCreatedAt = rdap.createdAt;
-    whoisHidden = rdap.hidden;
-    if (rdap.createdAt) {
-      const created = new Date(rdap.createdAt);
+  const whois = await lookupWhois(domain);
+  if (whois) {
+    whoisCreatedAt = whois.createdAt;
+    whoisHidden = whois.hidden;
+    if (whois.createdAt) {
+      const created = new Date(whois.createdAt);
       if (!isNaN(created.getTime())) {
         domainAgeDays = Math.floor(
           (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24),
@@ -601,35 +688,44 @@ export async function analyzeLayer2(input: Layer2Input): Promise<Layer2Result> {
       });
     }
   } else {
-    missingChecks.push("rdap");
+    missingChecks.push("whois");
   }
 
   // ── Phase 3 — IP / ASN / Geo ─────────────────────────────────────────────
-  let senderIp: string | null = null;
   let reverseDns: string | null = null;
   let asn: string | null = null;
   let asnOrganization: string | null = null;
   let country: string | null = null;
   let hostingProvider: string | null = null;
   let isCloudInfrastructure = false;
+  const ipExtraction = extractIpIntelligence(input.receivedHeaders ?? []);
+  const senderIp = ipExtraction.candidateIps[0] ?? null;
+  let geoRegion: string | null = null;
+  let geoCity: string | null = null;
+  let geoCountryCode: string | null = null;
+  let geoLatitude: number | null = null;
+  let geoLongitude: number | null = null;
 
-  const ipinfoToken = process.env.IPINFO_TOKEN;
-  if (ipinfoToken) {
-    senderIp = extractSenderIp(input.receivedHeaders ?? []);
-
-    if (senderIp) {
+  const maxmindReaders = await getMaxmindReaders();
+  if (senderIp) {
+    if (maxmindReaders) {
       const [ipInfo, ptr] = await Promise.all([
-        lookupIpInfo(senderIp, ipinfoToken),
+        Promise.resolve(maxmindReaders.city?.get(senderIp) as GeoLiteCity | null),
         lookupPtrRecord(senderIp),
       ]);
+      const asnInfo = maxmindReaders.asn?.get(senderIp) as GeoLiteAsn | null;
 
       reverseDns = ptr;
 
-      if (ipInfo) {
-        country = ipInfo.country ?? null;
-        const parsed = parseAsnFromOrg(ipInfo.org);
-        asn = parsed.asn;
-        asnOrganization = parsed.asnOrg;
+      if (ipInfo || asnInfo) {
+        country = ipInfo?.country?.names?.en ?? null;
+        geoCountryCode = ipInfo?.country?.iso_code ?? null;
+        geoRegion = ipInfo?.subdivisions?.[0]?.names?.en ?? null;
+        geoCity = ipInfo?.city?.names?.en ?? null;
+        geoLatitude = ipInfo?.location?.latitude ?? null;
+        geoLongitude = ipInfo?.location?.longitude ?? null;
+        asn = asnInfo?.autonomous_system_number ? `AS${asnInfo.autonomous_system_number}` : null;
+        asnOrganization = asnInfo?.autonomous_system_organization ?? null;
         hostingProvider = asnOrganization;
 
         if (asn && CLOUD_ASNS.has(asn)) {
@@ -651,7 +747,7 @@ export async function analyzeLayer2(input: Layer2Input): Promise<Layer2Result> {
 
         // Geolocation mismatch: TLD country hint vs actual IP country
         const tldCountry = countryHintFromDomain(domain);
-        if (tldCountry && country && tldCountry !== country) {
+        if (tldCountry && geoCountryCode && tldCountry !== geoCountryCode) {
           signals.push({
             code: "geolocation_mismatch",
             score: 10,
@@ -659,14 +755,40 @@ export async function analyzeLayer2(input: Layer2Input): Promise<Layer2Result> {
           });
         }
       } else {
+        missingChecks.push("maxmind");
+      }
+
+    } else {
+      const [ipInfo, ptr] = await Promise.all([lookupIpInfoFallback(senderIp), lookupPtrRecord(senderIp)]);
+      reverseDns = ptr;
+      if (ipInfo) {
+        country = ipInfo.country ?? null;
+        geoCountryCode = ipInfo.countryCode ?? null;
+        geoRegion = ipInfo.region ?? null;
+        geoCity = ipInfo.city ?? null;
+        const [latitude, longitude] = ipInfo.loc?.split(",").map(Number) ?? [];
+        geoLatitude = latitude !== undefined && Number.isFinite(latitude) ? latitude : null;
+        geoLongitude = longitude !== undefined && Number.isFinite(longitude) ? longitude : null;
+        const parsed = parseAsnFromOrg(ipInfo.org);
+        asn = parsed.asn;
+        asnOrganization = parsed.asnOrg;
+        hostingProvider = asnOrganization;
+      } else {
+        missingChecks.push("maxmind");
         missingChecks.push("ip_info");
       }
-    } else {
-      missingChecks.push("ip_extraction");
     }
   } else {
-    missingChecks.push("ip_info");
+    missingChecks.push("ip_extraction");
   }
+
+  if (!senderIp) missingChecks.push("ip_extraction");
+
+  const hasGeo = Boolean(country || geoRegion || geoCity);
+  const hasNetwork = Boolean(asn || asnOrganization || reverseDns);
+  const torStatus: DetectionStatus = input.anonymization?.tor ? "detected" : "unknown";
+  const vpnStatus: DetectionStatus = input.anonymization?.vpnOrProxy ? "detected" : "unknown";
+  const anonymizationStatus: DetectionStatus = torStatus === "detected" || vpnStatus === "detected" ? "detected" : "unknown";
 
   // ── Phase 4 — Blacklist reputation ───────────────────────────────────────
   const [dblHit, urlhausHit, threatfoxHit] = await Promise.all([
@@ -674,6 +796,8 @@ export async function analyzeLayer2(input: Layer2Input): Promise<Layer2Result> {
     checkUrlhaus(domain).catch(() => { missingChecks.push("urlhaus"); return false; }),
     checkThreatFox(domain).catch(() => { missingChecks.push("threatfox"); return false; }),
   ]);
+  const phishTankHit = await checkPhishTank(domain).catch(() => null);
+  if (phishTankHit === null) missingChecks.push("phishtank");
 
   let zenHit = false;
   if (senderIp) {
@@ -690,6 +814,7 @@ export async function analyzeLayer2(input: Layer2Input): Promise<Layer2Result> {
     { source: "spamhaus_dbl", type: "domain_reputation", listed: dblHit },
     { source: "spamhaus_zen", type: "ip_reputation", listed: zenHit },
     { source: "urlhaus", type: "malware_delivery", listed: urlhausHit },
+    { source: "phishtank", type: "phishing_url", listed: phishTankHit === true },
     { source: "threatfox", type: "threat_intel", listed: threatfoxHit },
   );
 
@@ -721,9 +846,16 @@ export async function analyzeLayer2(input: Layer2Input): Promise<Layer2Result> {
       explanation: "Domain matched an active IOC in abuse.ch ThreatFox threat intelligence database.",
     });
   }
+  if (phishTankHit) {
+    signals.push({
+      code: "urlhaus_match",
+      score: 30,
+      explanation: "Domain matched a PhishTank phishing report.",
+    });
+  }
 
   // ── Phase 5 — Confidence + final score ───────────────────────────────────
-  const externalChecksAttempted = 4; // rdap, ip_info, spamhaus_dbl+zen/urlhaus/phishtank counted as 2
+  const externalChecksAttempted = 5; // whois, maxmind, and blacklist groups
   const missingCount = missingChecks.length;
 
   let confidence: "full" | "partial" | "minimal";
@@ -755,6 +887,32 @@ export async function analyzeLayer2(input: Layer2Input): Promise<Layer2Result> {
     country,
     hostingProvider,
     isCloudInfrastructure,
+    ipExtraction,
+    geolocation: {
+      status: hasGeo ? "detected" : senderIp ? "unknown" : "not_applicable",
+      country,
+      countryCode: geoCountryCode,
+      region: geoRegion,
+      city: geoCity,
+      latitude: geoLatitude,
+      longitude: geoLongitude,
+      source: hasGeo ? (maxmindReaders ? "maxmind" : "ipinfo-fallback") : null,
+    },
+    network: {
+      status: hasNetwork ? "detected" : senderIp ? "unknown" : "not_applicable",
+      asn,
+      asnOrganization,
+      isp: asnOrganization,
+      hostingProvider,
+      reverseDns,
+    },
+    anonymization: {
+      status: anonymizationStatus,
+      tor: { status: torStatus, isExitNode: input.anonymization?.tor ?? null, source: input.anonymization?.tor ? "layer1-tor-project" : null },
+      vpn: { status: vpnStatus, isVpn: input.anonymization?.vpnOrProxy ?? null, provider: null, source: input.anonymization?.vpnOrProxy ? "layer1-ip-intelligence" : null },
+      proxy: { status: vpnStatus, isProxy: input.anonymization?.vpnOrProxy ?? null, source: input.anonymization?.vpnOrProxy ? "layer1-ip-intelligence" : null },
+    },
+    limitations: ipExtraction.limitations,
     blacklistMatches,
     signals,
     analyzedAt: new Date(),
