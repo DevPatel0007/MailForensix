@@ -155,7 +155,7 @@ const EmailAnalysisSchema = new Schema(
         proxy: { status: String, isProxy: Boolean, source: String },
       },
       limitations: [String],
-      blacklistMatches: [{ source: String, type: String, listed: Boolean }],
+      blacklistMatches: [Schema.Types.Mixed],
       signals: [{ code: String, score: Number, explanation: String }],
       analyzedAt: { type: Date, default: Date.now },
     },

@@ -16,7 +16,7 @@ import { userService } from "../../services";
 import { connectMongo, EmailAnalysis } from "@repo/mongodb";
 
 const getPath = generatePath("/gmail");
-const cookieFlags = "Path=/; HttpOnly; SameSite=Lax";
+const cookieFlags = "Path=/; HttpOnly; SameSite=None; Secure";
 
 type ContextWithResponse = { req?: { headers?: { cookie?: string } }; res?: { append: (field: string, value: string) => void } };
 
@@ -392,24 +392,33 @@ export const gmailRouter = router({
       const userId = String(ctx.user.id);
       const scans = await EmailAnalysis.find({ userId, "layer2.senderIp": { $exists: true, $ne: null } }).lean();
 
+      const toFiniteNumber = (value: unknown): number | null => {
+        if (typeof value === "number") return Number.isFinite(value) ? value : null;
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
+      };
+
       const locations = scans.flatMap((scan) => {
         const layer2 = scan.layer2;
         const geo = layer2?.geolocation;
-        if (!layer2?.senderIp || !geo || typeof geo.latitude !== "number" || typeof geo.longitude !== "number") return [];
-        if (!Number.isFinite(geo.latitude) || !Number.isFinite(geo.longitude)) return [];
+        const latitude = toFiniteNumber(geo?.latitude);
+        const longitude = toFiniteNumber(geo?.longitude);
+
+        if (!layer2?.senderIp || !geo || latitude === null || longitude === null) return [];
+
         return [{
           ip: layer2.senderIp,
           country: geo.country ?? layer2.country ?? null,
           countryCode: geo.countryCode ?? null,
           region: geo.region ?? null,
           city: geo.city ?? null,
-          lat: geo.latitude,
-          lng: geo.longitude,
-          accuracyRadiusKm: geo.accuracyRadiusKm ?? null,
+          lat: latitude,
+          lng: longitude,
+          accuracyRadiusKm: toFiniteNumber(geo.accuracyRadiusKm) ?? null,
           providerConfidence: geo.providerConfidence ?? null,
-          score: layer2.score ?? 0,
+          score: typeof layer2.score === "number" ? layer2.score : 0,
           source: geo.source ?? "unknown",
-          status: geo.status,
+          status: geo.status ?? "unknown",
         }];
       });
 

@@ -11,6 +11,26 @@ export const inngest = new Inngest({ id: "trpc-monorepo" });
 
 export const MAX_INNGEST_ATTACHMENT_BYTES = 640 * 1024;
 
+function sanitizeLayer2ForMongo<T extends Record<string, unknown>>(layer2: T) {
+  const blacklistMatches = Array.isArray(layer2.blacklistMatches) ? layer2.blacklistMatches : [];
+
+  return {
+    ...layer2,
+    blacklistMatches: blacklistMatches
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+        const record = item as Record<string, unknown>;
+        const source = typeof record.source === "string" ? record.source : null;
+        const type = typeof record.type === "string" ? record.type : "unknown";
+        const listed = typeof record.listed === "boolean" ? record.listed : false;
+
+        if (!source) return null;
+        return { source, type, listed };
+      })
+      .filter((item): item is { source: string; type: string; listed: boolean } => Boolean(item)),
+  };
+}
+
 export function prepareAttachmentsForInngest<T extends { contentBase64?: string }>(attachments: T[] = []): T[] {
   return attachments.map((attachment) => {
     if (!attachment.contentBase64) return attachment;
@@ -98,6 +118,19 @@ const analyzeLayer1ThenLayer2 = inngest.createFunction(
         },
       }),
     );
+
+    await step.run("persist-layer2-result", async () => {
+      await connectMongo();
+      const persistedLayer2 = sanitizeLayer2ForMongo({
+        ...layer2Result,
+        analyzedAt: new Date(layer2Result.analyzedAt),
+      });
+      await EmailAnalysis.findOneAndUpdate(
+        { gmailMessageId: input.gmailMessageId },
+        { $set: { layer2: persistedLayer2 } },
+        { upsert: true, new: true },
+      );
+    });
 
     const layer3Result = await step.run("nlp-llm-content-analysis", () =>
       analyzeLayer3({

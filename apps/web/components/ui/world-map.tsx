@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import DottedMap from "dotted-map";
 import Image from "next/image";
@@ -30,16 +30,33 @@ export default function WorldMap({
   lineColor = "#0ea5e9",
 }: MapProps) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const map = new DottedMap({ height: 100, grid: "diagonal" });
+  const [mounted, setMounted] = useState(false);
 
-  const { theme } = useTheme();
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
-  const svgMap = map.getSVG({
-    radius: 0.22,
-    color: theme === "dark" ? "#FFFFFF40" : "#00000040",
-    shape: "circle",
-    backgroundColor: theme === "dark" ? "black" : "white",
-  });
+  const { resolvedTheme } = useTheme();
+  const isDark = mounted && resolvedTheme === "dark";
+
+  const map = useMemo(() => {
+    if (!mounted) return null;
+    return new DottedMap({ height: 100, grid: "diagonal" });
+  }, [mounted]);
+
+  const svgMap = useMemo(() => {
+    if (!map) return "";
+    return map.getSVG({
+      radius: 0.22,
+      color: isDark ? "#FFFFFF40" : "#00000040",
+      shape: "circle",
+      backgroundColor: isDark ? "black" : "white",
+    });
+  }, [isDark, map]);
+
+  if (!mounted) {
+    return <div className="relative h-full min-h-full w-full overflow-hidden rounded-none bg-white font-sans dark:bg-black" aria-hidden="true" />;
+  }
 
   const projectPoint = (lat: number, lng: number) => {
     const x = (lng + 180) * (800 / 360);

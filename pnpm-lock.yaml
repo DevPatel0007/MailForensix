@@ -474,6 +474,9 @@ importers:
 
   packages/mongodb:
     dependencies:
+      dotenv:
+        specifier: ^16.5.0
+        version: 16.6.1
       mongoose:
         specifier: ^8.15.1
         version: 8.24.4(gcp-metadata@8.1.2)(socks@2.8.9)

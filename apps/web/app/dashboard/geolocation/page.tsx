@@ -32,6 +32,7 @@ function sourceLabel(source: string) {
 
 export default function GeolocationPage() {
   const { data, isLoading, isError } = trpc.gmail.geolocationData.useQuery()
+
   const locations = React.useMemo(() => (data?.locations ?? []) as LocationRecord[], [data])
 
   const [selectedLoc, setSelectedLoc] = React.useState<LocationRecord | null>(null)
@@ -55,14 +56,15 @@ export default function GeolocationPage() {
     onClick: () => setSelectedLoc(location),
   })
 
-  const mapDots = locations.map((location, index) => {
-    const start = locations[index - 1] ?? location
-
-    return {
-      start: mapPoint(start),
-      end: mapPoint(location),
-    }
-  })
+  const mapDots = React.useMemo(() => {
+    return locations.map((location) => {
+      const point = mapPoint(location)
+      return {
+        start: point,
+        end: point,
+      }
+    })
+  }, [locations, selectedLoc])
 
   return (
     <main className="space-y-8 pb-10">

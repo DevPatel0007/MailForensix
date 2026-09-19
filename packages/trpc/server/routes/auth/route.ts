@@ -28,7 +28,7 @@ import { userService } from '../../services';
 
 const TAGS = ["Authentication"];
 const getPath = generatePath("/auth");
-const cookieFlags = `Path=/; HttpOnly; SameSite=Lax${servicesEnv.AUTH_COOKIE_SECURE ? "; Secure" : ""}`;
+const cookieFlags = `Path=/; HttpOnly; SameSite=None; Secure`;
 
 function setCookie(ctx: { res?: { append: (field: string, value: string) => void } }, name: string, value: string, maxAge: number) {
   ctx.res?.append("Set-Cookie", `${name}=${encodeURIComponent(value)}; Max-Age=${maxAge}; ${cookieFlags}`);
@@ -129,7 +129,6 @@ export const authRouter = router({
       fullName: ctx.user.fullName,
       email: ctx.user.email,
     })),
-
   logout: publicProcedure
     .meta({ openapi: { method: "POST", path: getPath("/logout"), tags: TAGS } })
     .input(z.object({}))
