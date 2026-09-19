@@ -87,7 +87,16 @@ const analyzeLayer1ThenLayer2 = inngest.createFunction(
     });
 
     const layer2Result = await step.run("inspect-domain-infrastructure", () =>
-      analyzeLayer2({ from: input.from, receivedHeaders: input.receivedHeaders }),
+      analyzeLayer2({
+        from: input.from,
+        receivedHeaders: input.receivedHeaders ?? (layer1Result.mailauth.receivedChain ?? []).map((hop) =>
+          [hop.from?.comment, hop.from?.value, hop.by?.comment, hop.by?.value].filter(Boolean).join(" "),
+        ),
+        anonymization: {
+          tor: layer1Result.signals.some((signal) => signal.code === "tor_exit_node_detected"),
+          vpnOrProxy: layer1Result.signals.some((signal) => signal.code === "vpn_or_proxy_ip_detected"),
+        },
+      }),
     );
 
     const layer3Result = await step.run("nlp-llm-content-analysis", () =>

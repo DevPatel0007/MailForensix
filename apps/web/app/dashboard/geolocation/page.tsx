@@ -48,7 +48,7 @@ export default function GeolocationPage() {
           </Badge>
         </div>
         <p className="text-sm text-muted-foreground">
-          Origin coordinates and routing infrastructure identified from scanned email hop headers.
+          Provider-backed network coordinates extracted from scanned email hop headers.
         </p>
       </div>
 
@@ -89,7 +89,7 @@ export default function GeolocationPage() {
             <div>
               <CardTitle className="text-sm font-semibold">Global Threat Matrix</CardTitle>
               <CardDescription className="text-xs">
-                Click any sender marker to inspect origin network forensics
+                Click a verified network marker to inspect infrastructure evidence
               </CardDescription>
             </div>
             <div className="flex items-center gap-3 text-xs font-mono">
@@ -194,7 +194,13 @@ export default function GeolocationPage() {
                 <div className="space-y-2.5 text-xs font-mono divide-y divide-border/40">
                   <div className="flex justify-between py-1.5">
                     <span className="text-muted-foreground font-sans">Country / Jurisdiction:</span>
-                    <span className="font-semibold text-foreground">{selectedLoc.country || "Global Routing"}</span>
+                    <span className="font-semibold text-foreground">
+                      {selectedLoc.country || "Unknown"}{selectedLoc.countryCode ? ` (${selectedLoc.countryCode})` : ""}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1.5">
+                    <span className="text-muted-foreground font-sans">City / Region:</span>
+                    <span className="text-foreground">{[selectedLoc.city, selectedLoc.region].filter(Boolean).join(", ") || "Unknown"}</span>
                   </div>
                   <div className="flex justify-between py-1.5">
                     <span className="text-muted-foreground font-sans">Coordinates:</span>
@@ -207,6 +213,10 @@ export default function GeolocationPage() {
                     <span className={`font-bold ${selectedLoc.score > 50 ? "text-red-500" : "text-emerald-500"}`}>
                       {selectedLoc.score} / 100
                     </span>
+                  </div>
+                  <div className="flex justify-between py-1.5">
+                    <span className="text-muted-foreground font-sans">Evidence Source:</span>
+                    <span className="text-foreground">{selectedLoc.source} ({selectedLoc.status})</span>
                   </div>
                   <div className="flex justify-between py-1.5">
                     <span className="text-muted-foreground font-sans">Network Route:</span>
@@ -226,7 +236,7 @@ export default function GeolocationPage() {
               </div>
             ) : (
               <div className="py-12 text-center text-xs text-muted-foreground">
-                No location selected. Click a marker on the map to inspect host telemetry.
+                No provider-backed coordinates are available for the current scans.
               </div>
             )}
           </CardContent>

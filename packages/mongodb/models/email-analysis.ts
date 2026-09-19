@@ -40,6 +40,23 @@ export interface IEmailAnalysis extends Document {
     country?: string | null;
     hostingProvider?: string | null;
     isCloudInfrastructure?: boolean;
+    ipExtraction?: {
+      status: string;
+      ipsFound: string[];
+      candidateIps: string[];
+      privateIps: string[];
+      extractionSources: string[];
+      limitations: string[];
+    };
+    geolocation?: { status: string; country: string | null; countryCode: string | null; region: string | null; city: string | null; latitude: number | null; longitude: number | null; source: string | null };
+    network?: { status: string; asn: string | null; asnOrganization: string | null; isp: string | null; hostingProvider: string | null; reverseDns: string | null };
+    anonymization?: {
+      status: string;
+      tor: { status: string; isExitNode: boolean | null; source: string | null };
+      vpn: { status: string; isVpn: boolean | null; provider: string | null; source: string | null };
+      proxy: { status: string; isProxy: boolean | null; source: string | null };
+    };
+    limitations?: string[];
     blacklistMatches?: Array<{ source: string; type: string; listed: boolean }>;
     signals?: Array<{ code: string; score: number; explanation: string }>;
     analyzedAt?: Date;
@@ -121,6 +138,23 @@ const EmailAnalysisSchema = new Schema(
       country: String,
       hostingProvider: String,
       isCloudInfrastructure: Boolean,
+      ipExtraction: {
+        status: String,
+        ipsFound: [String],
+        candidateIps: [String],
+        privateIps: [String],
+        extractionSources: [String],
+        limitations: [String],
+      },
+      geolocation: { status: String, country: String, countryCode: String, region: String, city: String, latitude: Number, longitude: Number, source: String },
+      network: { status: String, asn: String, asnOrganization: String, isp: String, hostingProvider: String, reverseDns: String },
+      anonymization: {
+        status: String,
+        tor: { status: String, isExitNode: Boolean, source: String },
+        vpn: { status: String, isVpn: Boolean, provider: String, source: String },
+        proxy: { status: String, isProxy: Boolean, source: String },
+      },
+      limitations: [String],
       blacklistMatches: [{ source: String, type: String, listed: Boolean }],
       signals: [{ code: String, score: Number, explanation: String }],
       analyzedAt: { type: Date, default: Date.now },
