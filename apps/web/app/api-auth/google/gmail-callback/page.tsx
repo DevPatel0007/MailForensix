@@ -17,7 +17,7 @@ export default function GmailCallbackPage() {
     const state = params.get("state");
     if (!code || !state) { setError("Gmail connection was not completed."); return; }
     callback.mutate({ code, state }, {
-      onSuccess: () => window.location.assign("/workspace"),
+      onSuccess: () => window.location.assign("/dashboard"),
       onError: (cause) => setError(cause.message || "Gmail connection failed. Please try again."),
     });
   }, [callback]);

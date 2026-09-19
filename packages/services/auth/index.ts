@@ -7,7 +7,7 @@ const encoder = new TextEncoder();
 export const AUTH_COOKIE_NAME = "mailforensix_session";
 export const OAUTH_STATE_COOKIE_NAME = "mailforensix_oauth";
 export const GMAIL_OAUTH_STATE_COOKIE_NAME = "mailforensix_gmail_oauth";
-export const AUTH_COOKIE_MAX_AGE_SECONDS = 15 * 60;
+export const AUTH_COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 export const OAUTH_TRANSACTION_MAX_AGE_SECONDS = 10 * 60;
 
 export function createOAuthState() {
