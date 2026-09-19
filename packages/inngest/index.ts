@@ -4,6 +4,7 @@ import { analyzeLayer1, type Layer1Input } from "./Layers/layer1";
 import { analyzeLayer2 } from "./Layers/layer2";
 import { analyzeLayer3 } from "./Layers/layer3";
 import { analyzeLayer4, type Layer4AttachmentInput } from "./Layers/layer4";
+import { analyzeLayer5 } from "./Layers/layer5";
 import { connectMongo, EmailAnalysis } from "@repo/mongodb";
 
 export const inngest = new Inngest({ id: "trpc-monorepo" });
@@ -117,6 +118,18 @@ const analyzeLayer1ThenLayer2 = inngest.createFunction(
         { $set: { layer4: { ...layer4Result, analyzedAt: new Date() } } },
         { upsert: true, new: true },
       );
+    });
+
+    await step.run("persist-layer5-graph", async () => {
+      await analyzeLayer5({
+        gmailMessageId: input.gmailMessageId,
+        from: input.from,
+        to: input.to,
+        subject: input.subject,
+        date: input.date,
+        senderIp: layer2Result.senderIp ?? undefined,
+        domain: layer2Result.domain ?? undefined,
+      });
     });
 
     return { layer1: layer1Result, layer2: layer2Result, layer3: layer3Result, layer4: layer4Result };
