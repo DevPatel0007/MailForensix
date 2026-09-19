@@ -186,7 +186,6 @@ export const gmailRouter = router({
       const totalScans = await EmailAnalysis.countDocuments({ userId });
       
       // Threats are those with score > 50 in layer2 or something similar
-      // Let's make a mock logic if actual data isn't fully structured
       const threatsDetected = await EmailAnalysis.countDocuments({ userId, "layer2.score": { $gt: 50 } });
       const safeEmails = totalScans - threatsDetected;
       
@@ -197,6 +196,161 @@ export const gmailRouter = router({
       const averageScore = avgQuery[0]?.avg || 0;
 
       return { totalScans, threatsDetected, safeEmails, averageScore };
+    }),
+
+  analyticsStats: protectedProcedure
+    .meta({ openapi: { method: "GET", path: getPath("/analyticsStats"), tags: ["Gmail"] } })
+    .output(
+      z.object({
+        totalScans: z.number(),
+        threatsDetected: z.number(),
+        safeEmails: z.number(),
+        averageScore: z.number(),
+        detectionRate: z.number(),
+        cleanRate: z.number(),
+        weeklyVolumeChange: z.number(),
+        trafficTimeline: z.array(
+          z.object({
+            name: z.string(),
+            date: z.string(),
+            safe: z.number(),
+            threats: z.number(),
+            total: z.number(),
+          })
+        ),
+        threatVectors: z.array(
+          z.object({
+            type: z.string(),
+            count: z.number(),
+            share: z.string(),
+            color: z.string(),
+          })
+        ),
+      })
+    )
+    .query(async ({ ctx }) => {
+      await connectMongo();
+      const userId = String(ctx.user.id);
+      const allScans = await EmailAnalysis.find({ userId }).sort({ createdAt: -1 }).lean();
+
+      const totalScans = allScans.length;
+      let threatsDetected = 0;
+      let totalScore = 0;
+
+      let phishingCount = 0;
+      let authFailCount = 0;
+      let suspiciousUrlCount = 0;
+      let highRiskAttachmentCount = 0;
+
+      const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const now = new Date();
+      const past7Days: { name: string; date: string; safe: number; threats: number; total: number }[] = [];
+
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const dayStr = d.toISOString().split("T")[0]!;
+        past7Days.push({
+          name: daysOfWeek[d.getDay()]!,
+          date: dayStr,
+          safe: 0,
+          threats: 0,
+          total: 0,
+        });
+      }
+
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+      let thisWeekCount = 0;
+      let lastWeekCount = 0;
+
+      allScans.forEach((scan: any) => {
+        const score = scan.layer2?.score ?? scan.layer1?.score ?? (scan.layer3?.score ? scan.layer3.score * 10 : 0);
+        totalScore += score;
+        const isThreat = score > 50;
+        if (isThreat) threatsDetected++;
+
+        const hasPhishing = Boolean(
+          scan.layer3?.judgement?.bec_pattern ||
+          scan.layer3?.judgement?.impersonation_target ||
+          (scan.layer3?.score && scan.layer3.score > 5) ||
+          scan.layer3?.signals?.some((s: any) => s.code?.toLowerCase().includes("phish") || s.code?.toLowerCase().includes("bec"))
+        );
+        if (hasPhishing) phishingCount++;
+
+        const hasAuthFail = Boolean(
+          scan.layer1?.authentication?.spf?.result === "fail" ||
+          scan.layer1?.authentication?.dkim?.result === "fail" ||
+          scan.layer1?.authentication?.dmarc?.result === "fail" ||
+          scan.layer1?.signals?.some((s: any) => s.code?.toLowerCase().includes("fail") || s.score > 30)
+        );
+        if (hasAuthFail) authFailCount++;
+
+        const hasSuspiciousUrl = Boolean(
+          scan.layer4?.urls?.some((u: any) => u.verdict === "malicious" || (u.vtMaliciousCount && u.vtMaliciousCount > 0) || u.urlhausListed) ||
+          scan.layer4?.signals?.some((s: any) => s.code?.toLowerCase().includes("url"))
+        );
+        if (hasSuspiciousUrl) suspiciousUrlCount++;
+
+        const hasHighRiskAttachment = Boolean(
+          scan.layer4?.attachments?.some((a: any) => a.verdict === "malicious" || (a.vtMaliciousCount && a.vtMaliciousCount > 0)) ||
+          scan.layer4?.signals?.some((s: any) => s.code?.toLowerCase().includes("attach"))
+        );
+        if (hasHighRiskAttachment) highRiskAttachmentCount++;
+
+        const rawDate = scan.date || scan.createdAt;
+        const scanDate = rawDate ? new Date(rawDate) : new Date();
+        const scanDayStr = scanDate.toISOString().split("T")[0];
+        const dayBucket = past7Days.find((d) => d.date === scanDayStr);
+        if (dayBucket) {
+          dayBucket.total++;
+          if (isThreat) dayBucket.threats++;
+          else dayBucket.safe++;
+        }
+
+        if (scanDate >= sevenDaysAgo) {
+          thisWeekCount++;
+        } else if (scanDate >= fourteenDaysAgo) {
+          lastWeekCount++;
+        }
+      });
+
+      const safeEmails = totalScans - threatsDetected;
+      const averageScore = totalScans > 0 ? Number((totalScore / totalScans).toFixed(1)) : 0;
+      const detectionRate = totalScans > 0 ? Number(((threatsDetected / totalScans) * 100).toFixed(1)) : 0;
+      const cleanRate = totalScans > 0 ? Number(((safeEmails / totalScans) * 100).toFixed(1)) : (totalScans === 0 ? 100 : 0);
+
+      let weeklyVolumeChange = 0;
+      if (lastWeekCount > 0) {
+        weeklyVolumeChange = Number((((thisWeekCount - lastWeekCount) / lastWeekCount) * 100).toFixed(1));
+      } else if (thisWeekCount > 0) {
+        weeklyVolumeChange = 100;
+      }
+
+      const totalVectorOccurrences = phishingCount + authFailCount + suspiciousUrlCount + highRiskAttachmentCount;
+      const calcShare = (count: number) => {
+        if (totalVectorOccurrences === 0) return "0%";
+        return `${((count / totalVectorOccurrences) * 100).toFixed(1)}%`;
+      };
+
+      const threatVectors = [
+        { type: "Phishing / BEC Pattern", count: phishingCount, share: calcShare(phishingCount), color: "bg-red-500" },
+        { type: "SPF/DKIM Alignment Fail", count: authFailCount, share: calcShare(authFailCount), color: "bg-amber-500" },
+        { type: "Suspicious Embedded URL", count: suspiciousUrlCount, share: calcShare(suspiciousUrlCount), color: "bg-orange-500" },
+        { type: "High-Risk Attachment Extension", count: highRiskAttachmentCount, share: calcShare(highRiskAttachmentCount), color: "bg-purple-500" },
+      ];
+
+      return {
+        totalScans,
+        threatsDetected,
+        safeEmails,
+        averageScore,
+        detectionRate,
+        cleanRate,
+        weeklyVolumeChange,
+        trafficTimeline: past7Days,
+        threatVectors,
+      };
     }),
 
   pastScans: protectedProcedure

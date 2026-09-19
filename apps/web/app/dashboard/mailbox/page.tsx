@@ -2,10 +2,9 @@
 
 import { Suspense } from "react"
 import { useSearchParams } from "next/navigation"
-import { SiteHeader } from "~/components/site-header"
-import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar"
-import { AppSidebar } from "~/components/app-sidebar"
 import { GmailViewer } from "~/components/gmail-viewer"
+import { Badge } from "~/components/ui/badge"
+import { ShieldCheck, Loader2 } from "lucide-react"
 
 function MailboxContent() {
   const searchParams = useSearchParams()
@@ -23,29 +22,31 @@ function MailboxContent() {
 
 export default function MailboxPage() {
   return (
-    <SidebarProvider
-      style={
-        {
-          "--sidebar-width": "calc(var(--spacing) * 72)",
-          "--header-height": "calc(var(--spacing) * 12)",
-        } as React.CSSProperties
-      }
-    >
-      <AppSidebar variant="inset" />
-      <SidebarInset>
-        <SiteHeader />
-        <div className="flex flex-1 flex-col p-4 md:p-6 lg:px-8">
-          <div className="flex flex-col gap-4">
-            <h1 className="text-2xl font-bold tracking-tight text-ink">Mailbox</h1>
-            <p className="text-steel mb-2">
-              View your emails, run full security analysis scans, and download JSON reports.
-            </p>
-            <Suspense fallback={null}>
-              <MailboxContent />
-            </Suspense>
-          </div>
+    <div className="space-y-6">
+      <div className="flex flex-col gap-2 border-b border-border/50 pb-5">
+        <div className="flex items-center gap-2.5">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+            Mailbox & Forensic Inbox
+          </h1>
+          <Badge variant="outline" className="text-[10px] uppercase font-mono tracking-wider border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5">
+            Investigation Suite
+          </Badge>
         </div>
-      </SidebarInset>
-    </SidebarProvider>
+        <p className="text-sm text-muted-foreground">
+          Inspect message headers, perform deep multi-layer forensic threat scoring, and examine cryptographic signatures.
+        </p>
+      </div>
+
+      <Suspense
+        fallback={
+          <div className="flex min-h-64 items-center justify-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin text-emerald-500" />
+            <span>Loading mailbox forensics...</span>
+          </div>
+        }
+      >
+        <MailboxContent />
+      </Suspense>
+    </div>
   )
 }
