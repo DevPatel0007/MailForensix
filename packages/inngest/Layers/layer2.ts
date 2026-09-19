@@ -124,6 +124,8 @@ export interface Layer2Result {
     city: string | null;
     latitude: number | null;
     longitude: number | null;
+    accuracyRadiusKm: number | null;
+    providerConfidence: "low" | "medium" | "high" | null;
     source: string | null;
   };
   network: {
@@ -351,6 +353,19 @@ export function extractIpIntelligence(receivedHeaders: string[]): IpExtractionRe
 type GeoLiteCity = { country?: { iso_code?: string; names?: { en?: string } }; subdivisions?: Array<{ names?: { en?: string } }>; city?: { names?: { en?: string } }; location?: { latitude?: number; longitude?: number } };
 type GeoLiteAsn = { autonomous_system_number?: number; autonomous_system_organization?: string };
 type IpInfoFallback = { country?: string; countryCode?: string; region?: string; city?: string; loc?: string; org?: string };
+type IpGeolocationResponse = {
+  location?: {
+    country_code2?: string;
+    country_name?: string;
+    state_prov?: string;
+    city?: string;
+    latitude?: string;
+    longitude?: string;
+    accuracy_radius?: string;
+    confidence?: "low" | "medium" | "high";
+  };
+  asn?: { as_number?: string; organization?: string; country?: string };
+};
 
 type MaxmindReader = { get: (ip: string) => unknown };
 let maxmindReaders: { city?: MaxmindReader; asn?: MaxmindReader } | null;
@@ -370,6 +385,14 @@ async function lookupIpInfoFallback(ip: string): Promise<IpInfoFallback | null> 
   const token = process.env.IPINFO_TOKEN;
   if (!token) return null;
   return fetchJson<IpInfoFallback>(`https://ipinfo.io/${encodeURIComponent(ip)}/json?token=${encodeURIComponent(token)}`);
+}
+
+async function lookupIpGeolocation(ip: string): Promise<IpGeolocationResponse | null> {
+  const apiKey = process.env.IPGEOLOCATION_API_KEY;
+  if (!apiKey) return null;
+  return fetchJson<IpGeolocationResponse>(
+    `https://api.ipgeolocation.io/v3/ipgeo?apiKey=${encodeURIComponent(apiKey)}&ip=${encodeURIComponent(ip)}&include=geo_accuracy`,
+  );
 }
 
 async function lookupPtrRecord(ip: string): Promise<string | null> {
@@ -577,7 +600,7 @@ export async function analyzeLayer2(input: Layer2Input): Promise<Layer2Result> {
         extractionSources: [],
         limitations: ["No sender domain or usable public IP was available."],
       },
-      geolocation: { status: "not_applicable", country: null, countryCode: null, region: null, city: null, latitude: null, longitude: null, source: null },
+      geolocation: { status: "not_applicable", country: null, countryCode: null, region: null, city: null, latitude: null, longitude: null, accuracyRadiusKm: null, providerConfidence: null, source: null },
       network: { status: "not_applicable", asn: null, asnOrganization: null, isp: null, hostingProvider: null, reverseDns: null },
       anonymization: {
         status: "not_applicable",
@@ -705,6 +728,8 @@ export async function analyzeLayer2(input: Layer2Input): Promise<Layer2Result> {
   let geoCountryCode: string | null = null;
   let geoLatitude: number | null = null;
   let geoLongitude: number | null = null;
+  let geoAccuracyRadiusKm: number | null = null;
+  let geoProviderConfidence: "low" | "medium" | "high" | null = null;
 
   const maxmindReaders = await getMaxmindReaders();
   if (senderIp) {
@@ -759,23 +784,41 @@ export async function analyzeLayer2(input: Layer2Input): Promise<Layer2Result> {
       }
 
     } else {
-      const [ipInfo, ptr] = await Promise.all([lookupIpInfoFallback(senderIp), lookupPtrRecord(senderIp)]);
+      const [ipGeo, ptr] = await Promise.all([lookupIpGeolocation(senderIp), lookupPtrRecord(senderIp)]);
       reverseDns = ptr;
-      if (ipInfo) {
-        country = ipInfo.country ?? null;
-        geoCountryCode = ipInfo.countryCode ?? null;
-        geoRegion = ipInfo.region ?? null;
-        geoCity = ipInfo.city ?? null;
-        const [latitude, longitude] = ipInfo.loc?.split(",").map(Number) ?? [];
+      if (ipGeo?.location) {
+        country = ipGeo.location.country_name ?? null;
+        geoCountryCode = ipGeo.location.country_code2 ?? null;
+        geoRegion = ipGeo.location.state_prov ?? null;
+        geoCity = ipGeo.location.city ?? null;
+        const latitude = Number(ipGeo.location.latitude);
+        const longitude = Number(ipGeo.location.longitude);
         geoLatitude = latitude !== undefined && Number.isFinite(latitude) ? latitude : null;
         geoLongitude = longitude !== undefined && Number.isFinite(longitude) ? longitude : null;
-        const parsed = parseAsnFromOrg(ipInfo.org);
-        asn = parsed.asn;
-        asnOrganization = parsed.asnOrg;
+        geoAccuracyRadiusKm = Number.isFinite(Number(ipGeo.location.accuracy_radius)) ? Number(ipGeo.location.accuracy_radius) : null;
+        geoProviderConfidence = ipGeo.location.confidence ?? null;
+        asn = ipGeo.asn?.as_number ?? null;
+        asnOrganization = ipGeo.asn?.organization ?? null;
         hostingProvider = asnOrganization;
       } else {
-        missingChecks.push("maxmind");
-        missingChecks.push("ip_info");
+        const ipInfo = await lookupIpInfoFallback(senderIp);
+        if (ipInfo) {
+          country = ipInfo.country ?? null;
+          geoCountryCode = ipInfo.countryCode ?? null;
+          geoRegion = ipInfo.region ?? null;
+          geoCity = ipInfo.city ?? null;
+          const [latitude, longitude] = ipInfo.loc?.split(",").map(Number) ?? [];
+          geoLatitude = latitude !== undefined && Number.isFinite(latitude) ? latitude : null;
+          geoLongitude = longitude !== undefined && Number.isFinite(longitude) ? longitude : null;
+          const parsed = parseAsnFromOrg(ipInfo.org);
+          asn = parsed.asn;
+          asnOrganization = parsed.asnOrg;
+          hostingProvider = asnOrganization;
+        } else {
+          missingChecks.push("maxmind");
+          missingChecks.push("ip_geolocation");
+          missingChecks.push("ip_info");
+        }
       }
     }
   } else {
@@ -896,7 +939,9 @@ export async function analyzeLayer2(input: Layer2Input): Promise<Layer2Result> {
       city: geoCity,
       latitude: geoLatitude,
       longitude: geoLongitude,
-      source: hasGeo ? (maxmindReaders ? "maxmind" : "ipinfo-fallback") : null,
+      accuracyRadiusKm: geoAccuracyRadiusKm,
+      providerConfidence: geoProviderConfidence,
+      source: hasGeo ? (maxmindReaders ? "maxmind" : process.env.IPGEOLOCATION_API_KEY ? "ipgeolocation.io" : "ipinfo-fallback") : null,
     },
     network: {
       status: hasNetwork ? "detected" : senderIp ? "unknown" : "not_applicable",
