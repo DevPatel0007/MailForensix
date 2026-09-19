@@ -14,6 +14,7 @@ import { protectedProcedure, router } from "../../trpc";
 import { generatePath } from "../../utils/path-generator";
 import { userService } from "../../services";
 import { connectMongo, EmailAnalysis } from "@repo/mongodb";
+import { emailSummarySchema, getEmailSummary } from "../../services/email-summary";
 
 const getPath = generatePath("/gmail");
 const cookieFlags = "Path=/; HttpOnly; SameSite=None; Secure";
@@ -177,6 +178,12 @@ export const gmailRouter = router({
       
       return result as any; // tRPC will infer the type, or we could explicitly type it.
     }),
+
+  summary: protectedProcedure
+    .meta({ openapi: { method: "GET", path: getPath("/summary"), tags: ["Gmail"] } })
+    .input(z.object({ id: z.string().min(1).max(256) }))
+    .output(emailSummarySchema.nullable())
+    .query(async ({ ctx, input }) => getEmailSummary(String(ctx.user.id), input.id)),
 
   dashboardStats: protectedProcedure
     .meta({ openapi: { method: "GET", path: getPath("/dashboardStats"), tags: ["Gmail"] } })

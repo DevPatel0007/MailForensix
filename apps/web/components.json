@@ -23,6 +23,7 @@
   "menuAccent": "subtle",
   "registries": {
     "@magicui": "https://magicui.design/r/{name}",
-    "@aceternity": "https://ui.aceternity.com/registry/{name}.json"
+    "@aceternity": "https://ui.aceternity.com/registry/{name}.json",
+    "@pdfcn": "https://pdfcn.dev/r/{name}.json"
   }
 }
