@@ -9,6 +9,20 @@ import { connectMongo, EmailAnalysis } from "@repo/mongodb";
 
 export const inngest = new Inngest({ id: "trpc-monorepo" });
 
+export const MAX_INNGEST_ATTACHMENT_BYTES = 640 * 1024;
+
+export function prepareAttachmentsForInngest<T extends { contentBase64?: string }>(attachments: T[] = []): T[] {
+  return attachments.map((attachment) => {
+    if (!attachment.contentBase64) return attachment;
+
+    const decodedSizeEstimate = Math.max(0, Math.floor((attachment.contentBase64.length * 3) / 4));
+    if (decodedSizeEstimate <= MAX_INNGEST_ATTACHMENT_BYTES) return attachment;
+
+    const { contentBase64: _contentBase64, ...rest } = attachment as T & { contentBase64?: string };
+    return rest as T;
+  });
+}
+
 type MailReceivedEventData = Omit<Layer1Input, "message"> & {
   /** RFC822/EML content is transported as a JSON-safe string in the event. */
   message: string;

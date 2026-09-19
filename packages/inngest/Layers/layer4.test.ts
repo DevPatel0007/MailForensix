@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { prepareAttachmentsForInngest } from "../index";
 import { analyzeLayer4 } from "./layer4";
 
 test("flags mismatched and suspicious links without attachment bytes", async () => {
@@ -14,4 +15,18 @@ test("flags mismatched and suspicious links without attachment bytes", async () 
   assert.equal(result.urls[1]?.flags.includes("suspicious_url"), true);
   assert.equal(result.attachments[0]?.verdict, "unavailable");
   assert.equal(result.signals.some((signal) => signal.code === "attachment_scan_unavailable"), true);
+});
+
+test("strips oversized attachment blobs before they are sent to Inngest", () => {
+  const small = Buffer.from("small-payload").toString("base64");
+  const large = "A".repeat(180_000);
+
+  const result = prepareAttachmentsForInngest([
+    { filename: "safe.txt", mimeType: "text/plain", size: 14, contentBase64: small },
+    { filename: "huge.pdf", mimeType: "application/pdf", size: 180_000, contentBase64: large },
+  ]);
+
+  assert.equal(result[0]?.contentBase64, small);
+  assert.equal(result[1]?.contentBase64, undefined);
+  assert.equal(result[1]?.filename, "huge.pdf");
 });

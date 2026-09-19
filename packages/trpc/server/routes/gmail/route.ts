@@ -9,7 +9,7 @@ import {
 } from "@repo/services/auth";
 import { exchangeGmailAuthorizationCode, getGmailAuthorizationUrl } from "@repo/services/clients/google-oauth";
 import { listGmailLabels, listGmailMessages, getGmailMessage, getGmailRawMessage, getGmailAttachment } from "@repo/services/gmail/client";
-import { inngest } from "@repo/inngest";
+import { inngest, prepareAttachmentsForInngest } from "@repo/inngest";
 import { protectedProcedure, router } from "../../trpc";
 import { generatePath } from "../../utils/path-generator";
 import { userService } from "../../services";
@@ -132,6 +132,7 @@ export const gmailRouter = router({
         contentBase64: await getGmailAttachment(credentials, input.id, attachment.id),
       })));
       const account = await userService.getGoogleAccountForUser(String(ctx.user.id));
+      const safeAttachments = prepareAttachmentsForInngest(attachments);
 
       await inngest.send({
         name: "mail.received",
@@ -148,7 +149,7 @@ export const gmailRouter = router({
           date: message.date,
           bodyText: message.bodyText,
           bodyHtml: message.bodyHtml,
-          attachments,
+          attachments: safeAttachments,
         },
       });
 
