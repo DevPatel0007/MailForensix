@@ -5,7 +5,7 @@ import { trpc } from "~/trpc/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card"
 import { Badge } from "~/components/ui/badge"
 import WorldMap from "~/components/ui/world-map"
-import { Activity, Crosshair, Globe2, Info, MapPin, Server } from "lucide-react"
+import { Activity, Crosshair, Globe2, Info, MapPin, RefreshCcw, Server } from "lucide-react"
 
 type LocationRecord = {
   ip: string
@@ -31,7 +31,7 @@ function sourceLabel(source: string) {
 }
 
 export default function GeolocationPage() {
-  const { data, isLoading, isError } = trpc.gmail.geolocationData.useQuery()
+  const { data, isLoading, isError, refetch, isFetching } = trpc.gmail.geolocationData.useQuery()
 
   const locations = React.useMemo(() => (data?.locations ?? []) as LocationRecord[], [data])
 
@@ -100,7 +100,18 @@ export default function GeolocationPage() {
               <CardDescription className="mt-1 text-xs">The route follows persisted latitude and longitude from each mail hop.</CardDescription>
             </div>
 
-            <Badge variant="outline" className="shrink-0 gap-1.5 border-emerald-500/30 bg-emerald-500/5 text-[10px] text-emerald-600 dark:text-emerald-400"><span className="size-1.5 rounded-full bg-emerald-500" aria-hidden="true" />{isLoading ? "Fetching coordinates" : locations.length ? `${locations.length} mapped` : "Awaiting evidence"}</Badge>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => refetch()}
+                disabled={isLoading || isFetching}
+                className="inline-flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-2.5 py-1.5 text-[10px] font-medium text-emerald-700 transition hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-300"
+              >
+                <RefreshCcw className={`size-3.5 ${isFetching ? "animate-spin" : ""}`} aria-hidden="true" />
+                {isFetching ? "Refreshing" : "Refresh"}
+              </button>
+              <Badge variant="outline" className="shrink-0 gap-1.5 border-emerald-500/30 bg-emerald-500/5 text-[10px] text-emerald-600 dark:text-emerald-400"><span className="size-1.5 rounded-full bg-emerald-500" aria-hidden="true" />{isLoading ? "Fetching coordinates" : locations.length ? `${locations.length} mapped` : "Awaiting evidence"}</Badge>
+            </div>
           </CardHeader>
           <CardContent className="relative bg-[#050b0d] p-0 dark:bg-[#111817]">
             <div className="relative h-100 w-full sm:h-135">
