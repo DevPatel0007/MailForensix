@@ -25,6 +25,7 @@ import {
   Link2,
 } from "lucide-react"
 import { trpc } from "~/trpc/client"
+import { env } from "~/env.js"
 import { Button } from "~/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "~/components/ui/card"
 import { Badge } from "~/components/ui/badge"
@@ -62,14 +63,20 @@ export function GmailViewer({
     { id: selectedId ?? "" },
     { enabled: Boolean(selectedId) }
   )
+  const summary = trpc.gmail.summary.useQuery(
+    { id: selectedId ?? "" },
+    { enabled: Boolean(selectedId && analysis.data) }
+  )
   const connectUrl = trpc.gmail.connectUrl.useQuery(undefined, { enabled: false })
   const scan = trpc.gmail.scan.useMutation({
     onSuccess: () => {
       setTimeout(() => {
         void analysis.refetch()
+        void summary.refetch()
       }, 2500)
     },
   })
+  const [pdfPending, setPdfPending] = useState(false)
 
   const connect = async () => {
     const result = await connectUrl.refetch()
@@ -92,6 +99,33 @@ export function GmailViewer({
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
+  }
+
+  const downloadSummaryPdf = async () => {
+    if (!selectedId) return
+    setPdfPending(true)
+    try {
+      const apiBaseUrl = (env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/trpc").replace(/\/trpc\/?$/, "")
+      const response = await fetch(`${apiBaseUrl}/api/gmail/summary/pdf`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scanId: selectedId }),
+      })
+      if (!response.ok) throw new Error("Unable to create the PDF summary")
+
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement("a")
+      anchor.href = url
+      anchor.download = `mailforensix-summary-${selectedId}.pdf`
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(url)
+    } finally {
+      setPdfPending(false)
+    }
   }
 
   if (connection.isLoading)
@@ -290,15 +324,27 @@ export function GmailViewer({
                     </Button>
                   )}
                   {analysis.data && (
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      onClick={downloadAnalysisJson}
-                      title="Download Forensic JSON"
-                    >
-                      <Download className="size-3.5" />
-                    </Button>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        onClick={() => void downloadSummaryPdf()}
+                        disabled={pdfPending || summary.isLoading || !summary.data}
+                        title="Download PDF summary"
+                      >
+                        {pdfPending ? <Loader2 className="size-3.5 animate-spin" /> : <FileText className="size-3.5" />}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        onClick={downloadAnalysisJson}
+                        title="Download Forensic JSON"
+                      >
+                        <Download className="size-3.5" />
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -332,6 +378,36 @@ export function GmailViewer({
             {detail.isError ? (
               <ErrorState onRetry={() => void detail.refetch()} compact />
             ) : detail.data && (
+              <>
+              {summary.isLoading ? (
+                <div className="mb-4 flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin text-emerald-500" /> Loading generated summary...
+                </div>
+              ) : summary.data ? (
+                <div className="mb-4 space-y-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <FileText className="size-4 text-emerald-500" />
+                      <h3 className="text-sm font-semibold text-foreground">Email summary</h3>
+                    </div>
+                    <Badge variant="outline" className={summary.data.threatLevel === "flagged" ? "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-300" : "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"}>
+                      {summary.data.threatLevel} · {summary.data.riskScore}
+                    </Badge>
+                  </div>
+                  <p className="text-sm leading-6 text-foreground">{summary.data.summary}</p>
+                  {summary.data.keyPoints.length > 0 && (
+                    <ul className="space-y-1 text-xs leading-5 text-muted-foreground">
+                      {summary.data.keyPoints.slice(0, 4).map((point) => <li key={point}>• {point}</li>)}
+                    </ul>
+                  )}
+                  {summary.data.geolocation && (
+                    <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <Globe2 className="size-3.5 text-emerald-500" />
+                      {summary.data.geolocation.city ?? "Unknown city"}, {summary.data.geolocation.country ?? "Unknown country"} · {summary.data.geolocation.latitude.toFixed(4)}, {summary.data.geolocation.longitude.toFixed(4)}
+                    </p>
+                  )}
+                </div>
+              ) : null}
               <Tabs defaultValue="overview" className="w-full">
                 <TabsList className="w-full justify-start h-9 p-0.5 bg-muted/50 border border-border/60 overflow-x-auto">
                   <TabsTrigger value="overview" className="text-xs gap-1.5 h-7">
@@ -647,6 +723,7 @@ export function GmailViewer({
                   )}
                 </TabsContent>
               </Tabs>
+              </>
             )}
           </CardContent>
         </Card>
