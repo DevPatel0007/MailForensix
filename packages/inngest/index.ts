@@ -4,9 +4,24 @@ import { analyzeLayer1, type Layer1Input } from "./Layers/layer1";
 import { analyzeLayer2 } from "./Layers/layer2";
 import { analyzeLayer3 } from "./Layers/layer3";
 import { analyzeLayer4, type Layer4AttachmentInput } from "./Layers/layer4";
+import { analyzeLayer5, getCampaignCluster } from "./Layers/layer5";
 import { connectMongo, EmailAnalysis } from "@repo/mongodb";
 
 export const inngest = new Inngest({ id: "trpc-monorepo" });
+
+export const MAX_INNGEST_ATTACHMENT_BYTES = 640 * 1024;
+
+export function prepareAttachmentsForInngest<T extends { contentBase64?: string }>(attachments: T[] = []): T[] {
+  return attachments.map((attachment) => {
+    if (!attachment.contentBase64) return attachment;
+
+    const decodedSizeEstimate = Math.max(0, Math.floor((attachment.contentBase64.length * 3) / 4));
+    if (decodedSizeEstimate <= MAX_INNGEST_ATTACHMENT_BYTES) return attachment;
+
+    const { contentBase64: _contentBase64, ...rest } = attachment as T & { contentBase64?: string };
+    return rest as T;
+  });
+}
 
 type MailReceivedEventData = Omit<Layer1Input, "message"> & {
   /** RFC822/EML content is transported as a JSON-safe string in the event. */
@@ -72,7 +87,16 @@ const analyzeLayer1ThenLayer2 = inngest.createFunction(
     });
 
     const layer2Result = await step.run("inspect-domain-infrastructure", () =>
-      analyzeLayer2({ from: input.from, receivedHeaders: input.receivedHeaders }),
+      analyzeLayer2({
+        from: input.from,
+        receivedHeaders: input.receivedHeaders ?? (layer1Result.mailauth.receivedChain ?? []).map((hop) =>
+          [hop.from?.comment, hop.from?.value, hop.by?.comment, hop.by?.value].filter(Boolean).join(" "),
+        ),
+        anonymization: {
+          tor: layer1Result.signals.some((signal) => signal.code === "tor_exit_node_detected"),
+          vpnOrProxy: layer1Result.signals.some((signal) => signal.code === "vpn_or_proxy_ip_detected"),
+        },
+      }),
     );
 
     const layer3Result = await step.run("nlp-llm-content-analysis", () =>
@@ -119,7 +143,30 @@ const analyzeLayer1ThenLayer2 = inngest.createFunction(
       );
     });
 
-    return { layer1: layer1Result, layer2: layer2Result, layer3: layer3Result, layer4: layer4Result };
+    const layer5Result = await step.run("persist-layer5-graph", async () => {
+      const result = await analyzeLayer5({
+        gmailMessageId: input.gmailMessageId,
+        from: input.from,
+        to: input.to,
+        subject: input.subject,
+        date: input.date,
+        senderIp: layer2Result.senderIp ?? undefined,
+        domain: layer2Result.domain ?? undefined,
+      });
+
+      const cluster = await getCampaignCluster(input.gmailMessageId);
+
+      await connectMongo();
+      await EmailAnalysis.findOneAndUpdate(
+        { gmailMessageId: input.gmailMessageId },
+        { $set: { layer5: { cluster, recordsCreated: result.recordsCreated, analyzedAt: new Date() } } },
+        { upsert: true, new: true },
+      );
+
+      return { ...result, cluster };
+    });
+
+    return { layer1: layer1Result, layer2: layer2Result, layer3: layer3Result, layer4: layer4Result, layer5: layer5Result };
   },
 );
 

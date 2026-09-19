@@ -39,7 +39,7 @@ export function LoginForm({
         email: values.email,
         password: values.password,
       })
-      router.push("/")
+      router.push("/dashboard")
     } catch (error) {
       console.error(error)
       // Ideally show error message

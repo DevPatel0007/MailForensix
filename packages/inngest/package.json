@@ -15,6 +15,7 @@
   "dependencies": {
     "@google/genai": "^2.22.0",
     "@repo/mongodb": "workspace:*",
+    "@repo/neo4j": "workspace:*",
     "inngest": "^4.20.0",
     "mailauth": "^5.0.3",
     "maxmind": "^5.0.7",
