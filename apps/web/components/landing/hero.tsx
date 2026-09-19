@@ -1,19 +1,31 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useTheme } from 'next-themes'
 import { Container } from './primitives'
 import { HeroApp } from './hero-app'
 import { Reveal } from './reveal'
 import { Aurora } from './aurora'
 
 export function Hero() {
+  const { resolvedTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   return (
     <section className="relative overflow-hidden lg:h-[900px]">
       {/* Aurora shader — glows from the top edge, fades into the page background */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[560px] lg:h-[720px]" aria-hidden>
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[560px] opacity-70 dark:opacity-100 transition-opacity duration-300 lg:h-[720px]" aria-hidden>
         <Aurora
           className="h-full w-full"
           colorStops={['#00b48a', '#00d4a4', '#7cebcb']}
           amplitude={1.2}
           blend={0.7}
           speed={0.6}
+          lightMode={mounted && resolvedTheme === 'light'}
         />
         <div className="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-background to-transparent" />
       </div>
@@ -21,18 +33,9 @@ export function Hero() {
       <Container className="relative flex flex-col pt-28 pb-12 lg:h-full lg:pb-0">
         {/* Copy */}
         <div className="max-w-xl">
-          <Reveal>
-            <a
-              href="#evidence"
-              className="inline-flex items-center gap-2.5 rounded-sm border border-hairline bg-surface/70 px-3 py-1.5 text-[13px] font-medium text-muted-foreground transition-colors duration-200 hover:border-steel"
-            >
-              Threats traced
-              <span className="font-mono text-mint">68.07%</span>
-              <ChevronIcon />
-            </a>
-          </Reveal>
+          
           <Reveal delay={80}>
-            <h1 className="mt-7 text-[clamp(2.75rem,5.2vw,4.25rem)] leading-[1.02] font-medium tracking-[-0.035em] text-balance">
+            <h1 className="mt-7 text-[clamp(2.75rem,5.2vw,4.25rem)] leading-[1.02] font-semibold tracking-[-0.035em] text-balance">
               The forensic layer every inbox needs
             </h1>
           </Reveal>
@@ -46,14 +49,14 @@ export function Hero() {
           <Reveal delay={240} className="mt-8 flex flex-wrap items-center gap-3">
             <a
               href="#cta"
-              className="inline-flex items-center gap-2 rounded-sm bg-primary px-5 py-3 text-sm font-medium text-primary-foreground transition-colors duration-200 hover:bg-mint-soft"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground shadow-xs transition-opacity duration-200 hover:opacity-90"
             >
               Analyze an email
               <ChevronIcon />
             </a>
             <a
               href="#docs"
-              className="inline-flex items-center gap-2.5 rounded-sm border border-hairline bg-background/60 px-5 py-3 text-sm font-medium text-foreground transition-colors duration-200 hover:border-steel"
+              className="inline-flex items-center gap-2.5 rounded-lg border border-hairline bg-surface/80 px-5 py-3 text-sm font-medium text-foreground backdrop-blur-sm transition-colors duration-200 hover:border-steel hover:bg-surface"
             >
               <GoogleIcon />
               Sign up with Google

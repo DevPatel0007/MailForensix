@@ -82,7 +82,7 @@ function BentoCard({
 }) {
   return (
     <Reveal delay={delay} className={cn('min-w-0', className)}>
-      <div className="relative flex h-full flex-col overflow-hidden rounded-xl border border-hairline bg-surface">
+      <div className="relative flex h-full flex-col overflow-hidden rounded-xl border border-hairline bg-surface shadow-2xs">
         <div className={cn('relative flex min-h-[260px] flex-1 items-center justify-center overflow-hidden', tall && 'min-h-[320px] lg:min-h-[380px]')}>
           {children}
         </div>

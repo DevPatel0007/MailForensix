@@ -114,11 +114,11 @@ const GROUPS = [
 
 function EvidencePanel() {
   return (
-    <div className="absolute top-6 left-0 w-[62%] overflow-hidden rounded-xl border border-hairline bg-surface/80 shadow-[0_24px_48px_-16px_rgba(0,0,0,0.7)] backdrop-blur-sm lg:w-[56%]">
+    <div className="absolute top-6 left-0 w-[62%] overflow-hidden rounded-xl border border-hairline bg-surface/90 shadow-xl shadow-black/8 dark:shadow-[0_24px_48px_-16px_rgba(0,0,0,0.7)] backdrop-blur-sm lg:w-[56%]">
       <div className="flex flex-col py-2">
         {GROUPS.map((g, gi) => (
           <div key={g.title} className={cn(gi > 0 && 'mt-1')}>
-            <div className="flex items-center gap-2.5 bg-surface-code/50 px-4 py-2 text-[12px]">
+            <div className="flex items-center gap-2.5 bg-surface-code/60 px-4 py-2 text-[12px]">
               <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden className="text-steel">
                 <path d="M1 2.5l3 3 3-3" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" />
               </svg>
@@ -170,27 +170,27 @@ function Bars({ muted }: { muted?: boolean }) {
 type Tok = { t: string; c?: string }
 const REPORT_LINES: { toks: Tok[]; hl?: boolean }[] = [
   { toks: [{ t: '{' }] },
-  { toks: [{ t: '  "investigation_id": ', c: 'text-foreground' }, { t: '"MFX-48211"', c: 'text-mint-soft' }, { t: ',' }] },
-  { toks: [{ t: '  "verdict": ', c: 'text-foreground' }, { t: '"credential_phishing"', c: 'text-mint-soft' }, { t: ',' }], hl: true },
-  { toks: [{ t: '  "threat_level": ', c: 'text-foreground' }, { t: '"HIGH"', c: 'text-threat' }, { t: ',' }] },
-  { toks: [{ t: '  "confidence": ', c: 'text-foreground' }, { t: '0.964', c: 'text-mint' }, { t: ',' }] },
+  { toks: [{ t: '  "investigation_id": ', c: 'text-foreground' }, { t: '"MFX-48211"', c: 'text-emerald-600 dark:text-mint-soft' }, { t: ',' }] },
+  { toks: [{ t: '  "verdict": ', c: 'text-foreground' }, { t: '"credential_phishing"', c: 'text-emerald-600 dark:text-mint-soft' }, { t: ',' }], hl: true },
+  { toks: [{ t: '  "threat_level": ', c: 'text-foreground' }, { t: '"HIGH"', c: 'text-threat font-semibold' }, { t: ',' }] },
+  { toks: [{ t: '  "confidence": ', c: 'text-foreground' }, { t: '0.964', c: 'text-mint font-semibold' }, { t: ',' }] },
   { toks: [{ t: '' }] },
   { toks: [{ t: '  "evidence": [', c: 'text-foreground' }] },
-  { toks: [{ t: '    { "type": ', c: 'text-foreground' }, { t: '"auth"', c: 'text-mint-soft' }, { t: ', "finding": ' }, { t: '"SPF fail, DMARC reject"', c: 'text-mint-soft' }, { t: ' },' }], hl: true },
-  { toks: [{ t: '    { "type": ', c: 'text-foreground' }, { t: '"domain"', c: 'text-mint-soft' }, { t: ', "finding": ' }, { t: '"registered 3 days ago"', c: 'text-mint-soft' }, { t: ' },' }] },
-  { toks: [{ t: '    { "type": ', c: 'text-foreground' }, { t: '"infra"', c: 'text-mint-soft' }, { t: ', "finding": ' }, { t: '"AS9009, abuse score 87"', c: 'text-mint-soft' }, { t: ' },' }] },
-  { toks: [{ t: '    { "type": ', c: 'text-foreground' }, { t: '"geo"', c: 'text-mint-soft' }, { t: ', "finding": ' }, { t: '"2,140 km mismatch"', c: 'text-mint-soft' }, { t: ' },' }] },
-  { toks: [{ t: '    { "type": ', c: 'text-foreground' }, { t: '"correlation"', c: 'text-mint-soft' }, { t: ', "finding": ' }, { t: '"4 IOCs in THR-2291"', c: 'text-mint-soft' }, { t: ' }' }], hl: true },
+  { toks: [{ t: '    { "type": ', c: 'text-foreground' }, { t: '"auth"', c: 'text-emerald-600 dark:text-mint-soft' }, { t: ', "finding": ' }, { t: '"SPF fail, DMARC reject"', c: 'text-emerald-600 dark:text-mint-soft' }, { t: ' },' }], hl: true },
+  { toks: [{ t: '    { "type": ', c: 'text-foreground' }, { t: '"domain"', c: 'text-emerald-600 dark:text-mint-soft' }, { t: ', "finding": ' }, { t: '"registered 3 days ago"', c: 'text-emerald-600 dark:text-mint-soft' }, { t: ' },' }] },
+  { toks: [{ t: '    { "type": ', c: 'text-foreground' }, { t: '"infra"', c: 'text-emerald-600 dark:text-mint-soft' }, { t: ', "finding": ' }, { t: '"AS9009, abuse score 87"', c: 'text-emerald-600 dark:text-mint-soft' }, { t: ' },' }] },
+  { toks: [{ t: '    { "type": ', c: 'text-foreground' }, { t: '"geo"', c: 'text-emerald-600 dark:text-mint-soft' }, { t: ', "finding": ' }, { t: '"2,140 km mismatch"', c: 'text-emerald-600 dark:text-mint-soft' }, { t: ' },' }] },
+  { toks: [{ t: '    { "type": ', c: 'text-foreground' }, { t: '"correlation"', c: 'text-emerald-600 dark:text-mint-soft' }, { t: ', "finding": ' }, { t: '"4 IOCs in THR-2291"', c: 'text-emerald-600 dark:text-mint-soft' }, { t: ' }' }], hl: true },
   { toks: [{ t: '  ],', c: 'text-foreground' }] },
   { toks: [{ t: '' }] },
-  { toks: [{ t: '  "campaign": ', c: 'text-foreground' }, { t: '"THR-2291"', c: 'text-mint-soft' }, { t: ',' }] },
-  { toks: [{ t: '  "analyst_summary": ', c: 'text-foreground' }, { t: '"Vendor impersonation to harvest credentials."', c: 'text-mint-soft' }] },
+  { toks: [{ t: '  "campaign": ', c: 'text-foreground' }, { t: '"THR-2291"', c: 'text-emerald-600 dark:text-mint-soft' }, { t: ',' }] },
+  { toks: [{ t: '  "analyst_summary": ', c: 'text-foreground' }, { t: '"Vendor impersonation to harvest credentials."', c: 'text-emerald-600 dark:text-mint-soft' }] },
   { toks: [{ t: '}' }] },
 ]
 
 function ReportPanel() {
   return (
-    <div className="absolute top-0 right-0 w-[70%] overflow-hidden rounded-xl border border-hairline bg-surface shadow-[0_32px_64px_-16px_rgba(0,0,0,0.8),0_0_120px_-40px_rgba(0,212,164,0.15)] lg:w-[64%]">
+    <div className="absolute top-0 right-0 w-[70%] overflow-hidden rounded-xl border border-hairline bg-surface shadow-2xl shadow-black/10 dark:shadow-[0_32px_64px_-16px_rgba(0,0,0,0.8),0_0_120px_-40px_rgba(0,212,164,0.15)] lg:w-[64%]">
       <div className="flex items-center justify-between gap-4 border-b border-hairline px-4 py-2.5">
         <div className="flex items-center gap-2.5 font-mono text-[11px] text-steel">
           <FileIcon />

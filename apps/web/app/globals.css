@@ -91,18 +91,18 @@
   --sidebar-border: #eaeaea;
   --sidebar-ring: #00d4a4;
   /* MailForensix light-mode design tokens */
-  --surface: #f4f4f5;
-  --surface-code: #e4e4e7;
+  --surface: #ffffff;
+  --surface-code: #f4f4f5;
   --hairline: #e4e4e7;
   --hairline-soft: #f4f4f5;
   --steel: #71717a;
   --stone: #a1a1aa;
   --ink: #09090b;
   --canvas: #ffffff;
-  --mint: #00d4a4;
-  --mint-deep: #00b48a;
-  --mint-soft: #7cebcb;
-  --threat: #ef4444;
+  --mint: #009975;
+  --mint-deep: #007a5d;
+  --mint-soft: #059669;
+  --threat: #dc2626;
 }
 
 .dark {
@@ -185,6 +185,13 @@
   }
 
   .mockup-shadow {
+    box-shadow:
+      0 0 0 1px var(--hairline),
+      0 20px 40px -15px rgba(0, 0, 0, 0.07),
+      0 0 80px -20px rgba(0, 153, 117, 0.1);
+  }
+
+  .dark .mockup-shadow {
     box-shadow:
       0 0 0 1px var(--hairline),
       0 24px 48px -8px rgba(0, 0, 0, 0.6),
