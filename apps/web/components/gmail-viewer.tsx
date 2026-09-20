@@ -32,6 +32,7 @@ import { Badge } from "~/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs"
 import { Input } from "~/components/ui/input"
 import { Separator } from "~/components/ui/separator"
+import WorldMap from "~/components/ui/world-map"
 
 type LabelId = "INBOX" | "SENT" | "DRAFT" | "STARRED" | "SPAM" | "TRASH" | "IMPORTANT"
 
@@ -157,6 +158,10 @@ export function GmailViewer({
     analysis.data?.layer1?.score ??
     (analysis.data?.layer3?.score ? analysis.data.layer3.score * 10 : 0)
   const isThreat = overallScore > 50
+  const geolocation = analysis.data?.layer2?.geolocation
+  const latitude = typeof geolocation?.latitude === "number" ? geolocation.latitude : null
+  const longitude = typeof geolocation?.longitude === "number" ? geolocation.longitude : null
+  const hasCoordinates = latitude !== null && longitude !== null
 
   return (
     <div className="grid gap-6 lg:grid-cols-12 items-start">
@@ -609,6 +614,65 @@ export function GmailViewer({
 
                 {/* TAB 3: DOMAIN & IP (LAYER 2) */}
                 <TabsContent value="domain" className="space-y-3 pt-3">
+                  <div className="overflow-hidden rounded-lg border border-border/60 bg-muted/10">
+                    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/60 px-3 py-3">
+                      <div>
+                        <span className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                          <Globe2 className="size-3.5 text-emerald-500" /> Geolocation telemetry
+                        </span>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          Approximate network location from the analyzed sender IP.
+                        </p>
+                      </div>
+                      {hasCoordinates ? (
+                        <div className="grid grid-cols-2 gap-3 text-right font-mono text-[10px]">
+                          <div>
+                            <span className="block text-muted-foreground">Latitude</span>
+                            <span className="text-foreground">{latitude.toFixed(5)}</span>
+                          </div>
+                          <div>
+                            <span className="block text-muted-foreground">Longitude</span>
+                            <span className="text-foreground">{longitude.toFixed(5)}</span>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="relative h-52 bg-[#050b0d] dark:bg-[#111817]">
+                      {hasCoordinates ? (
+                        <WorldMap
+                          dots={[{
+                            start: {
+                              lat: latitude,
+                              lng: longitude,
+                              color: isThreat ? "#ef4444" : "#00a982",
+                              flagged: isThreat,
+                              selected: true,
+                              label: `${geolocation?.city ?? "Unknown city"} · ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
+                            },
+                            end: {
+                              lat: latitude,
+                              lng: longitude,
+                              color: isThreat ? "#ef4444" : "#00a982",
+                              flagged: isThreat,
+                              selected: true,
+                            },
+                          }]}
+                          lineColor={isThreat ? "#ef4444" : "#00a982"}
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center px-5 text-center text-xs text-muted-foreground">
+                          No latitude and longitude are available for this scan.
+                        </div>
+                      )}
+                    </div>
+                    {hasCoordinates ? (
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border/60 px-3 py-2 text-[10px] text-muted-foreground">
+                        <span>{geolocation?.city ?? "Unknown city"}{geolocation?.country ? `, ${geolocation.country}` : ""}</span>
+                        <span className="font-mono">{geolocation?.source ?? "Provider unavailable"}</span>
+                        <span className="ml-auto">Approximate telemetry</span>
+                      </div>
+                    ) : null}
+                  </div>
                   <div className="grid sm:grid-cols-2 gap-3 text-xs">
                     <div className="p-3 rounded-lg border border-border/60 bg-muted/15 space-y-2">
                       <span className="font-semibold text-foreground flex items-center gap-1.5">
