@@ -100,88 +100,125 @@ app.post("/api/gmail/summary/pdf", async (req, res, next) => {
       info: { Title: "MailForensix Email Summary", Author: "MailForensix" },
     });
 
-    const pageWidth = 595.28;
+    const margin = 48;
     const mutedColor = "#6b7280";
     const borderColor = "#d1d5db";
     const sectionColor = "#111827";
     const statusColor = summary.threatLevel === "flagged" ? "#dc2626" : summary.threatLevel === "suspicious" ? "#d97706" : "#059669";
+    const contentWidth = document.page.width - margin * 2;
+    let cursorY = margin;
 
-    const addSectionHeader = (label: string, y: number) => {
-      document.font("Helvetica-Bold").fontSize(9).fillColor(mutedColor).text(label.toUpperCase(), 48, y);
-      document.strokeColor(borderColor).moveTo(48, y + 16).lineTo(pageWidth - 48, y + 16).stroke();
-      return y + 26;
+    const ensureSpace = (height: number) => {
+      if (cursorY + height <= document.page.height - margin) return;
+      document.addPage();
+      cursorY = margin;
     };
 
-    document.fontSize(22).fillColor(sectionColor).text("MailForensix", 48, 48);
-    document.fontSize(10).fillColor(mutedColor).text("Email forensic summary", 48, 75);
-    document.fontSize(9).fillColor(mutedColor).text(new Date(summary.generatedAt).toLocaleString(), 420, 75, { align: "right" });
+    const addSectionHeader = (label: string) => {
+      ensureSpace(30);
+      document.font("Helvetica-Bold").fontSize(9).fillColor(mutedColor).text(label.toUpperCase(), margin, cursorY);
+      document.strokeColor(borderColor).moveTo(margin, cursorY + 16).lineTo(document.page.width - margin, cursorY + 16).stroke();
+      cursorY += 26;
+    };
 
-    document.fillColor("#ecfdf5").roundedRect(48, 96, pageWidth - 96, 96, 10).fill();
-    document.fillColor("#064e3b").font("Helvetica-Bold").fontSize(11).text("Executive summary", 64, 112);
-    document.fillColor(sectionColor).font("Helvetica-Bold").fontSize(18).text(headline, 64, 132, { width: pageWidth - 130 });
-    document.fillColor(sectionColor).font("Helvetica").fontSize(11).text(narrative, 64, 164, { width: pageWidth - 130, lineGap: 4 });
+    const addText = (text: string, options: PDFKit.Mixins.TextOptions & { font?: string; fontSize?: number; fillColor?: string; lineGap?: number; x?: number; width?: number } = {}) => {
+      const x = options.x ?? margin;
+      const width = options.width ?? contentWidth;
+      const textOptions = { ...options, width };
+      const height = document.heightOfString(text, textOptions);
+      ensureSpace(height);
+      document.text(text, x, cursorY, textOptions);
+      cursorY += height;
+      return height;
+    };
 
-    let cursorY = 214;
-    cursorY = addSectionHeader("Risk overview", cursorY);
-    document.fontSize(10).fillColor(mutedColor).text("Status", 64, cursorY);
-    document.fontSize(16).fillColor(statusColor).text(summary.threatLevel.toUpperCase(), 160, cursorY - 2);
-    document.fontSize(10).fillColor(mutedColor).text("Risk score", 260, cursorY);
-    document.fontSize(16).fillColor(sectionColor).text(`${summary.riskScore}/100`, 340, cursorY - 2);
+    document.fontSize(22).fillColor(sectionColor).text("MailForensix", margin, cursorY);
+    cursorY += 27;
+    document.fontSize(10).fillColor(mutedColor).text("Email forensic summary", margin, cursorY);
+    document.fontSize(9).fillColor(mutedColor).text(new Date(summary.generatedAt).toLocaleString(), margin, cursorY, { width: contentWidth, align: "right" });
+    cursorY += 21;
 
+    document.font("Helvetica-Bold").fontSize(18);
+    const headlineHeight = document.heightOfString(headline, { width: contentWidth - 32 });
+    document.font("Helvetica").fontSize(11);
+    const narrativeHeight = document.heightOfString(narrative, { width: contentWidth - 32, lineGap: 4 });
+    const summaryBoxHeight = 30 + headlineHeight + narrativeHeight + 22;
+    ensureSpace(summaryBoxHeight);
+    document.fillColor("#ecfdf5").roundedRect(margin, cursorY, contentWidth, summaryBoxHeight, 10).fill();
+    document.fillColor("#064e3b").font("Helvetica-Bold").fontSize(11).text("Executive summary", margin + 16, cursorY + 16);
+    document.fillColor(sectionColor).font("Helvetica-Bold").fontSize(18).text(headline, margin + 16, cursorY + 36, { width: contentWidth - 32 });
+    document.fillColor(sectionColor).font("Helvetica").fontSize(11).text(narrative, margin + 16, cursorY + 36 + headlineHeight + 6, { width: contentWidth - 32, lineGap: 4 });
+    cursorY += summaryBoxHeight + 20;
+
+    addSectionHeader("Risk overview");
+    ensureSpace(24);
+    document.fontSize(10).fillColor(mutedColor).text("Status", margin + 16, cursorY);
+    document.fontSize(16).fillColor(statusColor).text(summary.threatLevel.toUpperCase(), margin + 112, cursorY - 2);
+    document.fontSize(10).fillColor(mutedColor).text("Risk score", margin + 212, cursorY);
+    document.fontSize(16).fillColor(sectionColor).text(`${summary.riskScore}/100`, margin + 292, cursorY - 2);
     cursorY += 30;
-    document.fontSize(10).fillColor(mutedColor).text("Subject", 64, cursorY);
-    document.fontSize(11).fillColor(sectionColor).text(summary.subject ?? "Untitled email", 160, cursorY, { width: 320 });
-    document.fontSize(10).fillColor(mutedColor).text("Sender", 64, cursorY + 20);
-    document.fontSize(11).fillColor(sectionColor).text(summary.sender ?? "Unknown sender", 160, cursorY + 20, { width: 320 });
 
-    cursorY += 58;
-    cursorY = addSectionHeader("Key findings", cursorY);
+    const addMetadataRow = (label: string, value: string) => {
+      const valueWidth = contentWidth - 112;
+      document.font("Helvetica").fontSize(11);
+      const height = document.heightOfString(value, { width: valueWidth });
+      ensureSpace(Math.max(20, height));
+      document.fontSize(10).fillColor(mutedColor).text(label, margin + 16, cursorY);
+      document.fontSize(11).fillColor(sectionColor).text(value, margin + 112, cursorY, { width: valueWidth });
+      cursorY += Math.max(20, height) + 4;
+    };
+
+    addMetadataRow("Subject", summary.subject ?? "Untitled email");
+    addMetadataRow("Sender", summary.sender ?? "Unknown sender");
+
+    addSectionHeader("Key findings");
     for (const point of summary.keyPoints.slice(0, 4)) {
-      document.fillColor(sectionColor).fontSize(10).text(`• ${point}`, 64, cursorY, { width: pageWidth - 140, lineGap: 4 });
-      cursorY += 18;
+      document.font("Helvetica").fontSize(10);
+      const height = document.heightOfString(`• ${point}`, { width: contentWidth - 32, lineGap: 4 });
+      ensureSpace(height + 4);
+      document.fillColor(sectionColor).text(`• ${point}`, margin + 16, cursorY, { width: contentWidth - 32, lineGap: 4 });
+      cursorY += height + 4;
     }
 
     if (summary.geolocation) {
-      cursorY += 18;
-      cursorY = addSectionHeader("Geolocation", cursorY);
-      document.fontSize(10).fillColor(mutedColor).text("Location", 64, cursorY);
-      document.fontSize(11).fillColor(sectionColor).text(`${summary.geolocation.city ?? "Unknown city"}, ${summary.geolocation.country ?? "Unknown country"}`, 160, cursorY, { width: 300 });
-      document.fontSize(10).fillColor(mutedColor).text("Coordinates", 64, cursorY + 20);
-      document.fontSize(11).fillColor(sectionColor).text(`${summary.geolocation.latitude}, ${summary.geolocation.longitude}`, 160, cursorY + 20);
-      cursorY += 42;
+      addSectionHeader("Geolocation");
+      addMetadataRow("Location", `${summary.geolocation.city ?? "Unknown city"}, ${summary.geolocation.country ?? "Unknown country"}`);
+      addMetadataRow("Coordinates", `${summary.geolocation.latitude}, ${summary.geolocation.longitude}`);
     }
 
     if (summary.indicators.length) {
-      cursorY = addSectionHeader("Indicators", cursorY);
-      let indicatorY = cursorY;
+      addSectionHeader("Indicators");
       for (const indicator of summary.indicators.slice(0, 6)) {
-        document.fillColor(statusColor).fontSize(8).text(indicator.severity.toUpperCase(), 64, indicatorY, { width: 50 });
-        document.fillColor(sectionColor).fontSize(10).text(`${indicator.label}: ${indicator.value}`, 120, indicatorY, { width: pageWidth - 180, lineGap: 3 });
-        indicatorY += 18;
+        document.font("Helvetica").fontSize(10);
+        const value = `${indicator.label}: ${indicator.value}`;
+        const height = document.heightOfString(value, { width: contentWidth - 72, lineGap: 3 });
+        ensureSpace(height + 6);
+        document.fillColor(statusColor).fontSize(8).text(indicator.severity.toUpperCase(), margin + 16, cursorY, { width: 50 });
+        document.fillColor(sectionColor).fontSize(10).text(value, margin + 72, cursorY, { width: contentWidth - 72, lineGap: 3 });
+        cursorY += height + 6;
       }
-      cursorY = indicatorY + 10;
+      cursorY += 10;
     }
 
-    document.addPage();
-    document.fontSize(20).fillColor(sectionColor).text("Detailed assessment", 48, 48);
-    document.fontSize(10).fillColor(mutedColor).text("Narrative summary", 48, 76);
-    document.fontSize(11).fillColor(sectionColor).text(summary.summary, 48, 96, { width: pageWidth - 96, lineGap: 6 });
-
-    let detailY = 170;
-    document.fontSize(10).fillColor(mutedColor).text("Signals and context", 48, detailY - 16);
+    addSectionHeader("Detailed assessment");
+    addText(summary.summary, { font: "Helvetica", fontSize: 11, fillColor: sectionColor, lineGap: 6 });
+    cursorY += 18;
+    addSectionHeader("Signals and context");
     for (const point of summary.keyPoints.slice(0, 8)) {
-      document.fontSize(10).fillColor(sectionColor).text(`• ${point}`, 48, detailY, { width: pageWidth - 96, lineGap: 4 });
-      detailY += 18;
+      addText(`• ${point}`, { font: "Helvetica", fontSize: 10, fillColor: sectionColor, lineGap: 4 });
+      cursorY += 4;
     }
 
     if (summary.indicators.length > 6) {
-      document.addPage();
-      document.fontSize(20).fillColor(sectionColor).text("Additional indicators", 48, 48);
-      let extraY = 88;
+      addSectionHeader("Additional indicators");
       for (const indicator of summary.indicators.slice(6)) {
-        document.fillColor(statusColor).fontSize(8).text(indicator.severity.toUpperCase(), 48, extraY, { width: 50 });
-        document.fillColor(sectionColor).fontSize(10).text(`${indicator.label}: ${indicator.value}`, 110, extraY, { width: pageWidth - 150, lineGap: 3 });
-        extraY += 20;
+        document.font("Helvetica").fontSize(10);
+        const value = `${indicator.label}: ${indicator.value}`;
+        const height = document.heightOfString(value, { width: contentWidth - 62, lineGap: 3 });
+        ensureSpace(height + 6);
+        document.fillColor(statusColor).fontSize(8).text(indicator.severity.toUpperCase(), margin, cursorY, { width: 50 });
+        document.fillColor(sectionColor).fontSize(10).text(value, margin + 62, cursorY, { width: contentWidth - 62, lineGap: 3 });
+        cursorY += height + 6;
       }
     }
 
